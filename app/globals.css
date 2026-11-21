@@ -120,3 +120,78 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* ---- Race HUD ---------------------------------------------------------- */
+
+html,
+body {
+  background: #08030a;
+  overscroll-behavior: none;
+}
+
+.font-display {
+  font-family: var(--font-display), Impact, "Arial Narrow", sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.hud-panel {
+  background: linear-gradient(180deg, rgba(22, 8, 12, 0.86), rgba(10, 4, 7, 0.86));
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.hud-tab {
+  clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+}
+
+.canvas-photo {
+  filter: grayscale(1) contrast(1.25) brightness(1.08);
+  transition: filter 120ms linear;
+}
+
+.canvas-live {
+  filter: none;
+  transition: filter 500ms ease-out;
+}
+
+.hide-cursor,
+.hide-cursor * {
+  cursor: none !important;
+}
+
+@keyframes shine {
+  0% {
+    transform: translateX(-120%) skewX(-20deg);
+  }
+  60%,
+  100% {
+    transform: translateX(260%) skewX(-20deg);
+  }
+}
+
+.btn-shine::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: shine 2.6s ease-in-out infinite;
+}
+
+@keyframes live-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}
+
+.live-dot {
+  animation: live-dot 1s ease-in-out infinite;
+}

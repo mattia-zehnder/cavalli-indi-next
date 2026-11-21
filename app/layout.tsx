@@ -1,5 +1,5 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Anton, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,10 +12,19 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const display = Anton({
+  variable: "--font-display",
+  weight: "400",
+  subsets: ["latin"],
+});
+
 export const metadata: Metadata = {
   title: "Casino Campari Night - Bar Indipendenza",
-  description:
-    "Join us for a night of excitement and elegance at Bar Indipendenza.",
+  description: "Le corse dei camparini al Bar Indipendenza di Broni. Scegli il tuo e fai il tifo!",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#08030a",
 };
 
 export default function RootLayout({
@@ -24,9 +33,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="it">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${display.variable} antialiased`}
       >
         {children}
       </body>

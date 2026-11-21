@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Casino Campari Night 🏁
 
-## Getting Started
+Corse dei camparini per la serata al Bar Indipendenza (Broni).
 
-First, run the development server:
+## Alla serata
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
+npm run build && npm start   # più fluido di `npm run dev`
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Apri `http://localhost:3000` in **Chrome**, collega il portatile alla TV e premi **F** per lo schermo intero.
+Il primo click (o il primo tasto) attiva l'audio.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Tasto            | Cosa fa                                         |
+| ---------------- | ----------------------------------------------- |
+| `Spazio`/`Invio` | Partenza / prossima corsa                       |
+| `F`              | Schermo intero                                  |
+| `M`              | Suoni on/off                                    |
+| `V`              | Telecronaca vocale on/off                       |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Il numero della corsa e l'albo d'oro (vittorie di ogni camparino) restano salvati anche se ricarichi la pagina.
+  Per ripartire da zero c'è il pulsante ↺ in basso a sinistra (compare muovendo il mouse).
+- Funziona offline una volta avviato: niente CDN, suoni sintetizzati, texture disegnate al volo.
+- La telecronaca vocale usa la voce italiana del sistema/browser (su Chrome per macOS c'è).
 
-## Learn More
+## Come funziona una corsa
 
-To learn more about Next.js, take a look at the following resources:
+Ogni gara viene "scritta" in anticipo da un piccolo regista (`lib/race/plan.ts`):
+l'ordine d'arrivo è una permutazione casuale uniforme, poi tra ~50 gare candidate
+viene scelta quella con più sorpassi, rimonte e arrivo serrato. La scelta non guarda
+mai chi è chi, quindi **ogni camparino ha sempre il 20% di probabilità di vincere**.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+`?seed=123` nell'URL rigioca una gara precisa (utile per provare il fotofinish: `?seed=4`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Struttura
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `lib/race/config.ts` — concorrenti (nomi, numeri, colori) e misure della pista
+- `lib/race/plan.ts` — generazione della gara e della telecronaca
+- `lib/race/engine.ts` — orologio di gara, countdown, slow‑motion, fotofinish
+- `lib/race/audio.ts` — suoni (WebAudio) e voce
+- `components/race/*` — scena 3D (pista, bottiglie, regia) e HUD
+- `public/campari_soda_opt.glb` — modello ottimizzato (627 KB invece di 14,6 MB)
