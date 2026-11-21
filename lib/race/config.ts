@@ -1,3 +1,5 @@
+import { asset } from "../asset";
+
 // Shared constants for the race: who runs, how big the track is, how long a race lasts.
 
 export type Contender = {
@@ -50,7 +52,7 @@ export const worldX = (progress: number) => START_X + progress * TRACK_LEN;
 // Winners' enclosure lives past the finish line.
 export const ENCLOSURE_X = FINISH_X + 14;
 
-export const MODEL_URL = "/campari_soda_opt.glb";
+export const MODEL_URL = asset("/campari_soda_opt.glb");
 
 const RACE_NAMES = [
   "Premio Indipendenza",

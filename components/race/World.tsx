@@ -16,6 +16,7 @@ import {
 } from "@/lib/race/config";
 import type { RaceEngine } from "@/lib/race/engine";
 import { mulberry32 } from "@/lib/race/plan";
+import { asset } from "@/lib/asset";
 import {
   boardTexture,
   markerTexture,
@@ -112,7 +113,7 @@ export function Boards() {
   const logo = useMemo(() => {
     if (typeof Image === "undefined") return undefined;
     const img = new Image();
-    img.src = "/indi-background.png";
+    img.src = asset("/indi-background.png");
     return img;
   }, []);
   const textures = useMemo(

@@ -2,6 +2,9 @@
 
 Corse dei camparini per la serata al Bar Indipendenza (Broni).
 
+**Online:** https://mattia-zehnder.github.io/cavalli-indi-next/ — si aggiorna da solo a ogni push su `main`
+(workflow `.github/workflows/pages.yml`; in GitHub: Settings → Pages → Source: "GitHub Actions").
+
 ## Alla serata
 
 ```bash

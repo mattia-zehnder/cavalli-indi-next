@@ -21,6 +21,7 @@ import {
 import type { Snapshot } from "@/lib/race/engine";
 import type { CommentaryLine } from "@/lib/race/plan";
 import { formOf, type Tally } from "@/lib/race/tally";
+import { asset } from "@/lib/asset";
 
 const EDGE = "clamp(12px,1.6vw,28px)";
 const fade = {
@@ -125,7 +126,7 @@ export function TopBar({ snap, race }: { snap: Snapshot; race: number }) {
     >
       <div className="flex items-center gap-[clamp(10px,1vw,18px)]">
         <Image
-          src="/indi-background.png"
+          src={asset("/indi-background.png")}
           alt="Bar Indipendenza"
           width={72}
           height={72}
@@ -731,7 +732,7 @@ export function Loading({ progress }: { progress: number }) {
       className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-[#05080a]"
     >
       <Image
-        src="/indi-background.png"
+        src={asset("/indi-background.png")}
         alt=""
         width={84}
         height={84}
