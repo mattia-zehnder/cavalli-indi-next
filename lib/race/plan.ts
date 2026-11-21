@@ -237,45 +237,30 @@ function excitement(plan: RacePlan, n: number, rng: Rng) {
 }
 
 const LINES = {
-  start: [
-    "E SONO PARTITI!",
-    "VIA! Si parte!",
-    "Partiti! Che vinca il Campari migliore!",
-  ],
-  firstLead: ["{0} scatta subito davanti!", "Ottima partenza di {0}!"],
-  slowStart: [
-    "{0} è rimasto al bancone!",
-    "{0} parte in ritardo… stava ancora ordinando!",
-  ],
+  start: ["Partiti!", "Si aprono i cancelli: partiti!", "Partenza regolare, sono partiti!"],
+  firstLead: ["Al comando si porta {0}.", "Scatta bene {0}, che prende la testa."],
+  slowStart: ["Partenza lenta per {0}.", "{0} si fa sorprendere al via."],
   lead: [
-    "{0} passa in testa!",
-    "Sorpasso! Ora comanda {0}!",
-    "{0} si prende il comando!",
-    "{0} mette il naso davanti!",
+    "{0} passa al comando!",
+    "Cambio al vertice: ora guida {0}.",
+    "{0} prende la testa della corsa.",
+    "{0} si porta in testa.",
   ],
-  backInLead: ["{0} torna in testa!", "{0} riprende il comando!"],
+  backInLead: ["{0} torna al comando!", "{0} riprende la testa."],
   surge: [
-    "Che rimonta di {0}!",
-    "{0} ha messo il turbo!",
-    "Attenzione a {0}, sta volando!",
-    "{0} risale il gruppo!",
+    "Bella progressione di {0}.",
+    "{0} guadagna terreno all'esterno.",
+    "Attenzione a {0}, che risale forte.",
+    "{0} rimonta posizioni.",
   ],
-  hiccup: [
-    "{0} ha il singhiozzo!",
-    "{0} perde le bollicine!",
-    "Uh, {0} ha alzato il gomito!",
-  ],
-  half: ["Metà gara: comanda {0}, poi {1}!", "A metà corsa davanti c'è {0}, insegue {1}!"],
-  last: [
-    "{0} chiude il gruppo… aspetta il ghiaccio?",
-    "{0} se la prende comoda, è ancora all'aperitivo.",
-    "{0} in coda, si gode il panorama.",
-  ],
-  stretch: ["Ultimi cento metri!", "Rettilineo finale!"],
-  duel: ["{0} e {1} testa a testa!", "{0} contro {1}, che duello!"],
-  photo: ["FOTOFINISH!"],
-  win: ["Vince {0}!", "{0} vince la corsa!", "Trionfo di {0}!"],
-  winPhoto: ["Vince {0} per un soffio!", "Al fotofinish la spunta {0}!"],
+  hiccup: ["{0} perde un po' di terreno.", "Momento di difficoltà per {0}."],
+  half: ["A metà percorso comanda {0}, segue {1}.", "Metà corsa: {0} davanti a {1}."],
+  last: ["Chiude il gruppo {0}.", "In coda al gruppo {0}."],
+  stretch: ["Entrano in dirittura d'arrivo!", "Ultimi cento metri!"],
+  duel: ["{0} e {1} appaiati!", "Testa a testa tra {0} e {1}!"],
+  photo: ["Arrivo al fotofinish!"],
+  win: ["Vince {0}!", "Primo al traguardo {0}!", "{0} vince il premio!"],
+  winPhoto: ["Al fotofinish la spunta {0}!", "Vince {0}, per pochissimo!"],
 };
 
 function buildCommentary(plan: RacePlan, n: number, rng: Rng): CommentaryLine[] {

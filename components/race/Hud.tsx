@@ -2,31 +2,46 @@
 import Image from "next/image";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  Flag,
   Maximize,
   Mic,
   MicOff,
   Minimize,
   RotateCcw,
-  Trophy,
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { CONTENDERS, RACE_METERS, type Contender } from "@/lib/race/config";
+import {
+  CONTENDERS,
+  RACE_METERS,
+  lengthsShort,
+  marginLabel,
+  raceName,
+  type Contender,
+} from "@/lib/race/config";
 import type { Snapshot } from "@/lib/race/engine";
 import type { CommentaryLine } from "@/lib/race/plan";
+import { formOf, type Tally } from "@/lib/race/tally";
 
-import type { Tally } from "@/lib/race/tally";
+const EDGE = "clamp(12px,1.6vw,28px)";
+const fade = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
+};
 
-const fmtTime = (s: number) => `${s.toFixed(2).replace(".", ",")}″`;
-const fmtGap = (s: number) => `+${s.toFixed(2).replace(".", ",")}″`;
-const MEDAL = ["#ffd34d", "#e5e7eb", "#e0a060"];
+/** 0'22"72 */
+const fmtTime = (s: number) => {
+  const m = Math.floor(s / 60);
+  const rest = (s - m * 60).toFixed(2).padStart(5, "0").replace(".", '"');
+  return `${m}'${rest}`;
+};
 
 // ---------------------------------------------------------------------------
 
-export function NumberTile({
+/** Saddle-cloth number: the colour square everybody bets on. */
+export function Saddle({
   c,
-  size = 32,
+  size = 30,
   className = "",
 }: {
   c: Contender;
@@ -35,15 +50,15 @@ export function NumberTile({
 }) {
   return (
     <span
-      className={`font-display inline-flex shrink-0 items-center justify-center rounded-[22%] text-white ${className}`}
+      className={`font-display inline-flex shrink-0 items-center justify-center font-bold text-white ${className}`}
       style={{
         width: size,
         height: size,
-        fontSize: size * 0.66,
+        fontSize: size * 0.72,
         lineHeight: 1,
-        background: `linear-gradient(160deg, ${c.hex}, color-mix(in srgb, ${c.hex} 70%, black))`,
-        boxShadow: `0 0 ${size * 0.5}px ${c.hex}66, inset 0 1px 0 rgba(255,255,255,.35)`,
-        textShadow: "0 1px 2px rgba(0,0,0,.35)",
+        background: c.hex,
+        boxShadow: "inset 0 0 0 2px rgba(255,255,255,.55)",
+        borderRadius: Math.max(2, size * 0.08),
       }}
     >
       {c.number}
@@ -55,11 +70,9 @@ function Chip({ i }: { i: number }) {
   const c = CONTENDERS[i];
   if (!c) return null;
   return (
-    <span className="mx-1 inline-flex items-center gap-2 align-middle">
-      <NumberTile c={c} size={30} />
-      <span style={{ color: c.hex }} className="font-display uppercase">
-        {c.name}
-      </span>
+    <span className="ml-1.5 inline-flex items-baseline gap-2 align-middle">
+      <Saddle c={c} size={28} className="self-center" />
+      <span className="font-semibold">{c.name}</span>
     </span>
   );
 }
@@ -70,9 +83,29 @@ function LineText({ line }: { line: CommentaryLine }) {
     <>
       {parts.map((p, k) => {
         const m = p.match(/^\{(\d)\}$/);
-        return m ? <Chip key={k} i={line.horses[Number(m[1])]} /> : <span key={k}>{p}</span>;
+        return m ? (
+          <Chip key={k} i={line.horses[Number(m[1])]} />
+        ) : (
+          <span key={k}>{p}</span>
+        );
       })}
     </>
+  );
+}
+
+function Label({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`font-display text-[clamp(11px,0.8vw,15px)] font-semibold uppercase tracking-[0.22em] text-[var(--rc-cream)]/55 ${className}`}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -81,46 +114,50 @@ function LineText({ line }: { line: CommentaryLine }) {
 export function TopBar({ snap, race }: { snap: Snapshot; race: number }) {
   const status =
     snap.phase === "paddock"
-      ? { text: "Scommesse aperte", color: "#22c55e" }
-      : snap.phase === "countdown"
-        ? { text: "In partenza", color: "#ffb347" }
-        : snap.phase === "running"
-          ? { text: "Live", color: "#ff2d55" }
-          : { text: "Arrivo ufficiale", color: "#ffd34d" };
+      ? { text: "Scommesse aperte", color: "#3fbf7f" }
+      : snap.phase === "finished"
+        ? { text: "Arrivo ufficiale", color: "#c9a44c" }
+        : { text: "Scommesse chiuse", color: "#e0404f" };
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 p-[clamp(12px,1.6vw,28px)]">
+    <div
+      className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4"
+      style={{ padding: EDGE }}
+    >
       <div className="flex items-center gap-[clamp(10px,1vw,18px)]">
         <Image
           src="/indi-background.png"
           alt="Bar Indipendenza"
-          width={84}
-          height={84}
+          width={72}
+          height={72}
           priority
-          className="h-[clamp(44px,4.4vw,84px)] w-auto drop-shadow-[0_0_18px_rgba(255,40,60,0.55)]"
+          className="h-[clamp(38px,3.6vw,68px)] w-auto"
         />
         <div className="leading-none">
-          <div className="font-display text-[clamp(22px,2.6vw,52px)] uppercase text-white [text-shadow:0_2px_24px_rgba(255,42,60,0.55)]">
-            Casino <span className="text-[#ff2a3c]">Campari</span> Night
+          <div className="font-serif text-[clamp(22px,2.3vw,44px)] font-bold italic text-[var(--rc-cream)]">
+            Casino Campari Night
           </div>
-          <div className="mt-1 text-[clamp(11px,0.9vw,17px)] font-semibold uppercase tracking-[0.25em] text-white/60">
-            Bar Indipendenza · Broni (PV)
-          </div>
+          <Label className="mt-1.5">Ippodromo Bar Indipendenza · Broni</Label>
         </div>
       </div>
-      <div className="flex flex-col items-end gap-2">
-        <div className="hud-panel flex items-center gap-3 rounded-xl px-[clamp(12px,1.2vw,22px)] py-[clamp(6px,0.6vw,12px)]">
-          <span className="text-[clamp(11px,0.85vw,16px)] font-semibold uppercase tracking-[0.2em] text-white/55">
-            Corsa
-          </span>
-          <span className="font-display text-[clamp(24px,2.4vw,48px)] leading-none text-white">
-            N° {race}
-          </span>
+      <div className="flex flex-col items-end gap-2 text-right">
+        <div className="hud-panel rounded-md px-[clamp(12px,1.1vw,20px)] py-[clamp(6px,0.55vw,10px)]">
+          <Label>Corsa N° {race}</Label>
+          <div className="font-serif mt-1 text-[clamp(16px,1.45vw,28px)] font-semibold leading-none text-[var(--rc-cream)]">
+            {raceName(race)}
+          </div>
         </div>
         <div
-          className="flex items-center gap-2 rounded-full px-3 py-1 text-[clamp(11px,0.8vw,15px)] font-bold uppercase tracking-[0.18em]"
-          style={{ background: `${status.color}22`, color: status.color, border: `1px solid ${status.color}55` }}
+          className="font-display flex items-center gap-2 rounded-sm px-2.5 py-1 text-[clamp(11px,0.8vw,15px)] font-semibold uppercase tracking-[0.18em]"
+          style={{
+            background: "rgba(8,13,11,.85)",
+            color: status.color,
+            border: `1px solid ${status.color}66`,
+          }}
         >
-          <span className="live-dot inline-block h-2 w-2 rounded-full" style={{ background: status.color }} />
+          <span
+            className={`inline-block h-2 w-2 ${snap.phase === "running" ? "live-dot" : ""}`}
+            style={{ background: status.color }}
+          />
           {status.text}
         </div>
       </div>
@@ -132,48 +169,47 @@ export function TopBar({ snap, race }: { snap: Snapshot; race: number }) {
 
 export function Standings({ snap }: { snap: Snapshot }) {
   const lead = Math.max(...snap.progress);
-  const winT = snap.finishOrder.length ? snap.finishTimes[snap.finishOrder[0]] : 0;
   return (
-    <div className="hud-panel pointer-events-none absolute right-[clamp(12px,1.6vw,28px)] top-[clamp(110px,10vw,180px)] z-20 w-[clamp(230px,19vw,360px)] overflow-hidden rounded-2xl">
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-2">
-        <span className="font-display text-[clamp(16px,1.3vw,26px)] uppercase text-white">Classifica</span>
-        <span className="flex items-center gap-1.5 text-[clamp(10px,0.75vw,14px)] font-bold uppercase tracking-widest text-[#ff2d55]">
-          <span className="live-dot h-2 w-2 rounded-full bg-[#ff2d55]" /> Live
+    <div
+      className="hud-panel pointer-events-none absolute z-20 w-[clamp(230px,18vw,340px)] overflow-hidden rounded-md"
+      style={{ right: EDGE, top: "clamp(120px,10.5vw,190px)" }}
+    >
+      <div className="flex items-center justify-between px-3 pb-1.5 pt-2">
+        <span className="font-display text-[clamp(14px,1.05vw,20px)] font-semibold uppercase tracking-[0.14em] text-[var(--rc-cream)]">
+          Ordine di corsa
+        </span>
+        <span className="font-display flex items-center gap-1.5 text-[clamp(10px,0.75vw,14px)] font-semibold uppercase tracking-widest text-[#e0404f]">
+          <span className="live-dot h-1.5 w-1.5 bg-[#e0404f]" /> Live
         </span>
       </div>
-      <div className="flex flex-col gap-1 p-2">
+      <div className="hud-rule" />
+      <div className="flex flex-col py-1">
         {snap.ranking.map((i, pos) => {
           const c = CONTENDERS[i];
           const fin = snap.finishOrder.indexOf(i);
           let right: string;
-          if (fin === 0) right = fmtTime(winT);
-          else if (fin > 0) right = fmtGap(snap.finishTimes[i] - winT);
-          else if (pos === 0) right = `${Math.max(0, Math.round((1 - snap.progress[i]) * RACE_METERS))} m`;
-          else right = `-${((lead - snap.progress[i]) * RACE_METERS).toFixed(1).replace(".", ",")} m`;
+          if (fin >= 0) right = fin === 0 ? "1° arrivato" : `${fin + 1}°`;
+          else if (pos === 0)
+            right = `${Math.max(0, Math.round((1 - snap.progress[i]) * RACE_METERS))} m`;
+          else right = lengthsShort((lead - snap.progress[i]) * RACE_METERS);
           return (
             <motion.div
               layout
-              transition={{ type: "spring", stiffness: 500, damping: 40 }}
+              transition={{ type: "tween", duration: 0.22, ease: "easeOut" }}
               key={c.id}
-              className="flex items-center gap-2 rounded-lg px-2 py-[clamp(4px,0.45vw,9px)]"
+              className="flex items-center gap-2.5 px-3 py-[clamp(3px,0.4vw,7px)]"
               style={{
-                background:
-                  pos === 0
-                    ? `linear-gradient(90deg, ${c.hex}55, ${c.hex}10)`
-                    : `linear-gradient(90deg, ${c.hex}22, transparent)`,
+                background: pos === 0 ? "rgba(201,164,76,.12)" : undefined,
               }}
             >
-              <span
-                className="font-display w-[1.6em] text-center text-[clamp(16px,1.35vw,26px)] leading-none"
-                style={{ color: pos < 3 ? MEDAL[pos] : "rgba(255,255,255,.55)" }}
-              >
-                {pos + 1}°
+              <span className="font-display w-[1.4em] text-[clamp(15px,1.2vw,22px)] font-bold text-[var(--rc-cream)]/70">
+                {pos + 1}
               </span>
-              <NumberTile c={c} size={28} />
-              <span className="font-display flex-1 truncate text-[clamp(15px,1.25vw,24px)] uppercase leading-none text-white">
+              <Saddle c={c} size={26} />
+              <span className="font-display flex-1 truncate text-[clamp(15px,1.2vw,22px)] font-semibold uppercase tracking-wide text-[var(--rc-cream)]">
                 {c.name}
               </span>
-              <span className="font-mono text-[clamp(11px,0.85vw,16px)] tabular-nums text-white/75">
+              <span className="font-display text-[clamp(12px,0.95vw,17px)] font-medium tabular-nums text-[var(--rc-cream)]/70">
                 {right}
               </span>
             </motion.div>
@@ -190,43 +226,50 @@ export function Tracker({ snap }: { snap: Snapshot }) {
   const lead = Math.max(...snap.progress);
   const toGo = Math.max(0, Math.round((1 - lead) * RACE_METERS));
   return (
-    <div className="hud-panel pointer-events-none absolute inset-x-[clamp(12px,1.6vw,28px)] bottom-[clamp(12px,1.6vw,28px)] z-20 mx-auto flex max-w-[1400px] items-center gap-4 rounded-2xl px-[clamp(12px,1.2vw,22px)] py-3">
-      <div className="w-[clamp(84px,8vw,150px)] shrink-0 leading-none">
-        <div className="text-[clamp(10px,0.75vw,14px)] font-bold uppercase tracking-[0.2em] text-white/50">
-          {toGo > 0 ? "Mancano" : "Arrivo"}
-        </div>
-        <div className="font-display mt-1 text-[clamp(22px,2vw,40px)] tabular-nums text-white">
-          {toGo > 0 ? `${toGo} m` : <Flag className="inline h-[1em] w-[1em] text-[#ffd34d]" />}
+    <div
+      className="hud-panel pointer-events-none absolute z-20 mx-auto flex max-w-[1400px] items-center gap-5 rounded-md px-[clamp(12px,1.2vw,22px)] py-3"
+      style={{ left: EDGE, right: EDGE, bottom: EDGE }}
+    >
+      <div className="w-[clamp(84px,7.5vw,140px)] shrink-0 leading-none">
+        <Label>{toGo > 0 ? "Al traguardo" : "Arrivo"}</Label>
+        <div className="font-display mt-1 text-[clamp(24px,2.1vw,40px)] font-bold tabular-nums text-[var(--rc-cream)]">
+          {toGo > 0 ? `${toGo} m` : "—"}
         </div>
       </div>
-      <div className="relative h-[clamp(64px,5.4vw,96px)] flex-1">
-        {/* lanes */}
+      <div className="relative h-[clamp(60px,5vw,90px)] flex-1">
         {CONTENDERS.map((c, i) => (
           <div
             key={c.id}
-            className="absolute inset-x-0 h-px"
-            style={{ top: `${((i + 0.5) / CONTENDERS.length) * 100}%`, background: `${c.hex}40` }}
+            className="absolute inset-x-0 h-px bg-white/10"
+            style={{ top: `${((i + 0.5) / CONTENDERS.length) * 100}%` }}
           />
         ))}
-        {[0.25, 0.5, 0.75].map((m) => (
-          <div key={m} className="absolute inset-y-0 w-px bg-white/10" style={{ left: `${m * 100}%` }} />
+        {[200, 400, 600].map((m) => (
+          <div
+            key={m}
+            className="absolute inset-y-0"
+            style={{ left: `${(1 - m / RACE_METERS) * 100}%` }}
+          >
+            <div className="h-full w-px bg-white/15" />
+            <span className="font-display absolute -top-0.5 left-1 text-[10px] font-medium text-white/35">
+              {m}
+            </span>
+          </div>
         ))}
-        <div
-          className="absolute -right-1 inset-y-0 w-2 rounded-sm"
-          style={{
-            backgroundImage: "repeating-conic-gradient(#fff 0 25%, #111 0 50%)",
-            backgroundSize: "8px 8px",
-          }}
-        />
+        {/* winning post */}
+        <div className="absolute inset-y-0 right-0 w-[3px] bg-[var(--rc-red)]" />
         {CONTENDERS.map((c, i) => {
           const p = Math.min(1, snap.progress[i]);
           return (
             <div
               key={c.id}
               className="absolute -translate-x-1/2 -translate-y-1/2 transition-[left] duration-100 ease-linear"
-              style={{ left: `${p * 100}%`, top: `${((i + 0.5) / CONTENDERS.length) * 100}%` }}
+              style={{
+                left: `${p * 100}%`,
+                top: `${((i + 0.5) / CONTENDERS.length) * 100}%`,
+              }}
             >
-              <NumberTile c={c} size={22} className="rounded-full" />
+              <Saddle c={c} size={20} />
             </div>
           );
         })}
@@ -245,19 +288,22 @@ export function Ticker({ snap }: { snap: Snapshot }) {
     snap.t - snap.line.t < 2.8 &&
     snap.phase !== "finished";
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-[clamp(110px,9.5vw,170px)] z-30 flex justify-center px-4">
+    <div
+      className="pointer-events-none absolute inset-x-0 z-30 flex justify-center px-4"
+      style={{ bottom: "clamp(108px,9.2vw,165px)" }}
+    >
       <AnimatePresence mode="wait">
         {show && snap.line && (
           <motion.div
             key={snap.lineId}
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -12, scale: 0.98 }}
-            transition={{ type: "spring", stiffness: 420, damping: 32 }}
-            className="hud-panel flex items-center gap-3 rounded-2xl border-l-4 border-l-[#ff2a3c] px-[clamp(14px,1.4vw,28px)] py-[clamp(8px,0.8vw,16px)]"
+            {...fade}
+            transition={{ duration: 0.25 }}
+            className="hud-panel flex items-center gap-4 rounded-md border-l-4 border-l-[var(--rc-gold)] px-[clamp(14px,1.3vw,26px)] py-[clamp(8px,0.7vw,14px)]"
           >
-            <Mic className="h-[clamp(18px,1.6vw,30px)] w-[clamp(18px,1.6vw,30px)] shrink-0 text-[#ff2a3c]" />
-            <span className="font-display text-[clamp(20px,2.1vw,42px)] uppercase leading-tight text-white">
+            <div className="flex flex-col items-center gap-1 text-[var(--rc-gold)]">
+              <Mic className="h-[clamp(16px,1.3vw,24px)] w-[clamp(16px,1.3vw,24px)]" />
+            </div>
+            <span className="text-[clamp(18px,1.7vw,34px)] font-medium leading-tight text-[var(--rc-cream)]">
               <LineText line={snap.line} />
             </span>
           </motion.div>
@@ -269,35 +315,44 @@ export function Ticker({ snap }: { snap: Snapshot }) {
 
 // ---------------------------------------------------------------------------
 
-export function Countdown({ snap }: { snap: Snapshot }) {
-  const n = snap.countdown;
+/** Loading into the stalls (replaces a big 3-2-1). */
+export function StartStrip({ snap }: { snap: Snapshot }) {
+  const show = snap.phase === "countdown";
+  const u = Math.min(1, Math.max(0, 1 + snap.t / 5));
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center">
+    <div
+      className="pointer-events-none absolute inset-x-0 z-30 flex justify-center px-4"
+      style={{ bottom: "clamp(108px,9.2vw,165px)" }}
+    >
       <AnimatePresence>
-        {n != null && (
+        {show && (
           <motion.div
-            key={n}
-            initial={{ scale: n === 0 ? 0.4 : 2.2, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: n === 0 ? 1.8 : 0.6, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 18 }}
-            className="font-display absolute select-none text-center uppercase leading-none"
-            style={{
-              fontSize: n === 4 ? "clamp(56px,8vw,170px)" : n === 0 ? "clamp(120px,17vw,360px)" : "clamp(140px,21vw,440px)",
-              color: n === 0 ? "#ffd34d" : "#ffffff",
-              textShadow:
-                n === 0
-                  ? "0 0 60px rgba(255,211,77,.8), 0 10px 0 #b3121f"
-                  : "0 0 50px rgba(255,42,60,.8), 0 10px 0 #b3121f",
-            }}
+            key="start"
+            {...fade}
+            transition={{ duration: 0.3 }}
+            className="hud-panel w-[min(640px,90vw)] rounded-md px-6 py-4 text-center"
           >
-            {n === 4 ? "Pronti?" : n === 0 ? "Via!" : n}
+            <Label>{raceStartLabel(snap.t)}</Label>
+            <div className="font-serif mt-1 text-[clamp(22px,2.1vw,40px)] font-semibold italic text-[var(--rc-cream)]">
+              {snap.t < -2
+                ? "I partenti entrano in gabbia"
+                : "Pronti alla partenza"}
+            </div>
+            <div className="mt-3 h-[3px] w-full bg-white/10">
+              <div
+                className="h-full bg-[var(--rc-gold)]"
+                style={{ width: `${u * 100}%` }}
+              />
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
     </div>
   );
 }
+
+const raceStartLabel = (t: number) =>
+  t < -2 ? "Scommesse chiuse" : "Partenza";
 
 // ---------------------------------------------------------------------------
 
@@ -308,26 +363,24 @@ export function PhotoFinish({ snap }: { snap: Snapshot }) {
         <motion.div
           key="photo"
           className="pointer-events-none absolute inset-0 z-40"
-          initial={{ opacity: 1 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.35 }}
+          {...fade}
+          transition={{ duration: 0.3 }}
         >
           <motion.div
             className="absolute inset-0 bg-white"
-            initial={{ opacity: 0.95 }}
+            initial={{ opacity: 0.85 }}
             animate={{ opacity: 0 }}
-            transition={{ duration: 0.45 }}
+            transition={{ duration: 0.4 }}
           />
-          <div className="absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2 bg-[#ff2a3c] shadow-[0_0_20px_#ff2a3c]" />
-          <motion.div
-            initial={{ scale: 2.4, rotate: -14, opacity: 0 }}
-            animate={{ scale: 1, rotate: -6, opacity: 1 }}
-            transition={{ type: "spring", stiffness: 380, damping: 16, delay: 0.1 }}
-            className="font-display absolute left-1/2 top-[11%] -translate-x-1/2 rounded-xl border-[5px] border-[#ff2a3c] bg-black/50 px-6 py-1.5 text-[clamp(40px,5.2vw,110px)] uppercase leading-none text-[#ff2a3c]"
-          >
-            Fotofinish
-          </motion.div>
+          <div className="absolute inset-y-0 left-1/2 w-[2px] -translate-x-1/2 bg-[var(--rc-red)]" />
+          <div className="absolute left-1/2 top-[11%] -translate-x-1/2 bg-black/80 px-6 py-2.5 text-center">
+            <div className="font-display text-[clamp(28px,3vw,56px)] font-bold uppercase tracking-[0.3em] text-white">
+              Fotofinish
+            </div>
+            <div className="font-display text-[clamp(11px,0.85vw,16px)] font-medium uppercase tracking-[0.25em] text-white/60">
+              Esame della fotografia d&apos;arrivo
+            </div>
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
@@ -341,24 +394,23 @@ export function WinnerBanner({ snap }: { snap: Snapshot }) {
   const show = snap.phase === "running" && w != null && !snap.photo;
   const c = w != null ? CONTENDERS[w] : null;
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-[clamp(90px,9vw,170px)] z-30 flex justify-center">
+    <div
+      className="pointer-events-none absolute inset-x-0 z-30 flex justify-center"
+      style={{ top: "clamp(110px,9.5vw,180px)" }}
+    >
       <AnimatePresence>
         {show && c && (
           <motion.div
             key="winner"
-            initial={{ y: -40, opacity: 0, scale: 0.8 }}
-            animate={{ y: 0, opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            transition={{ type: "spring", stiffness: 380, damping: 22 }}
-            className="hud-panel flex items-center gap-4 rounded-2xl border-2 px-6 py-3"
-            style={{ borderColor: "#ffd34d", boxShadow: "0 0 60px rgba(255,211,77,.35)" }}
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+            className="hud-panel flex items-center gap-4 rounded-md border-t-2 border-t-[var(--rc-gold)] px-6 py-3"
           >
-            <Trophy className="h-[clamp(28px,2.6vw,52px)] w-[clamp(28px,2.6vw,52px)] text-[#ffd34d]" />
-            <span className="font-display text-[clamp(28px,3vw,60px)] uppercase leading-none text-white">
-              Vince
-            </span>
-            <NumberTile c={c} size={56} />
-            <span className="font-display text-[clamp(28px,3vw,60px)] uppercase leading-none" style={{ color: c.hex }}>
+            <Label className="!text-[var(--rc-gold)]">Vincitore</Label>
+            <Saddle c={c} size={48} />
+            <span className="font-display text-[clamp(28px,2.8vw,54px)] font-bold uppercase leading-none tracking-wide text-[var(--rc-cream)]">
               {c.name}
             </span>
           </motion.div>
@@ -370,7 +422,29 @@ export function WinnerBanner({ snap }: { snap: Snapshot }) {
 
 // ---------------------------------------------------------------------------
 
-export function Paddock({
+function Form({ positions }: { positions: number[] }) {
+  if (!positions.length)
+    return <span className="text-[var(--rc-cream)]/40">—</span>;
+  return (
+    <span className="inline-flex gap-1">
+      {positions.map((p, k) => (
+        <span
+          key={k}
+          className="font-display inline-flex h-[1.5em] w-[1.3em] items-center justify-center text-[0.95em] font-semibold"
+          style={{
+            background: p === 1 ? "var(--rc-gold)" : "rgba(239,230,210,.1)",
+            color: p === 1 ? "#14110a" : "var(--rc-cream)",
+          }}
+        >
+          {p}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** Racecard shown while bets are open. */
+export function Racecard({
   tally,
   onStart,
   disabled,
@@ -381,75 +455,72 @@ export function Paddock({
 }) {
   return (
     <motion.div
-      initial={{ y: 60, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      exit={{ y: 60, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 260, damping: 28 }}
-      className="absolute inset-x-0 bottom-0 z-30 flex flex-col items-center gap-[clamp(10px,1vw,20px)] px-[clamp(12px,1.6vw,28px)] pb-[clamp(14px,1.8vw,32px)]"
+      {...fade}
+      transition={{ duration: 0.4 }}
+      className="absolute inset-x-0 bottom-0 z-30 flex justify-center"
+      style={{ padding: EDGE }}
     >
-      <div className="text-center">
-        <div className="font-display text-[clamp(30px,3.6vw,72px)] uppercase leading-none text-white [text-shadow:0_4px_30px_rgba(0,0,0,.8)]">
-          Scegli il tuo <span className="text-[#ff2a3c]">camparino</span>
+      <div className="hud-panel w-full max-w-[1500px] overflow-hidden rounded-md">
+        <div className="flex flex-wrap items-end justify-between gap-2 px-[clamp(14px,1.4vw,28px)] pb-2 pt-3">
+          <div>
+            <Label>Programma · Corsa N° {tally.race}</Label>
+            <div className="font-serif mt-1 text-[clamp(24px,2.4vw,46px)] font-bold leading-none text-[var(--rc-cream)]">
+              {raceName(tally.race)}
+            </div>
+          </div>
+          <div className="font-display text-right text-[clamp(13px,1vw,19px)] font-medium uppercase tracking-[0.12em] text-[var(--rc-cream)]/70">
+            {RACE_METERS} m · Pista in erba · Terreno buono ·{" "}
+            {CONTENDERS.length} partenti
+          </div>
         </div>
-        <div className="mt-1 text-[clamp(12px,1vw,19px)] font-semibold uppercase tracking-[0.3em] text-white/60">
-          Scommesse aperte · tutti hanno la stessa probabilità
-        </div>
-      </div>
-
-      <div className="grid w-full max-w-[1500px] grid-cols-5 gap-[clamp(6px,0.8vw,16px)]">
-        {CONTENDERS.map((c, k) => {
-          const wins = tally.wins[c.id] ?? 0;
-          return (
-            <motion.div
-              key={c.id}
-              initial={{ y: 30, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ delay: 0.08 * k, type: "spring", stiffness: 300, damping: 26 }}
-              className="hud-panel relative flex items-center gap-[clamp(8px,0.8vw,16px)] overflow-hidden rounded-2xl p-[clamp(8px,0.8vw,16px)]"
-              style={{ borderColor: `${c.hex}66` }}
-            >
+        <div className="hud-rule" />
+        <div className="grid grid-cols-5 divide-x divide-white/10">
+          {CONTENDERS.map((c) => {
+            const wins = tally.wins[c.id] ?? 0;
+            return (
               <div
-                className="pointer-events-none absolute inset-0 opacity-60"
-                style={{ background: `radial-gradient(120% 90% at 0% 0%, ${c.hex}40, transparent 60%)` }}
-              />
-              <NumberTile c={c} size={64} className="relative" />
-              <div className="relative min-w-0">
-                <div className="font-display truncate text-[clamp(18px,1.7vw,34px)] uppercase leading-none text-white">
-                  {c.name}
-                </div>
-                <div className="mt-1.5 flex items-center gap-1 text-[clamp(11px,0.85vw,16px)] font-semibold text-white/65">
-                  <Trophy className="h-[1.1em] w-[1.1em]" style={{ color: wins ? "#ffd34d" : undefined }} />
-                  {wins === 0 ? "Ancora a secco" : wins === 1 ? "1 vittoria" : `${wins} vittorie`}
+                key={c.id}
+                className="flex items-center gap-[clamp(8px,0.9vw,16px)] px-[clamp(10px,1.1vw,22px)] py-[clamp(10px,1vw,18px)]"
+              >
+                <Saddle c={c} size={58} />
+                <div className="min-w-0 leading-tight">
+                  <div className="font-display truncate text-[clamp(18px,1.6vw,32px)] font-bold uppercase tracking-wide text-[var(--rc-cream)]">
+                    {c.name}
+                  </div>
+                  <div className="font-display mt-1 flex items-center gap-2 text-[clamp(11px,0.85vw,16px)] text-[var(--rc-cream)]/60">
+                    <span className="uppercase tracking-[0.14em]">Forma</span>
+                    <Form positions={formOf(tally, c.id)} />
+                  </div>
+                  <div className="font-display text-[clamp(11px,0.85vw,16px)] uppercase tracking-[0.14em] text-[var(--rc-cream)]/60">
+                    Vittorie{" "}
+                    <span className="font-semibold text-[var(--rc-cream)]">
+                      {wins}
+                    </span>
+                  </div>
                 </div>
               </div>
-            </motion.div>
-          );
-        })}
-      </div>
-
-      <div className="flex flex-wrap items-center justify-center gap-[clamp(10px,1.4vw,28px)]">
-        {tally.history.length > 0 && (
-          <div className="hud-panel flex items-center gap-2 rounded-full px-4 py-2">
-            <span className="text-[clamp(10px,0.8vw,15px)] font-bold uppercase tracking-[0.18em] text-white/55">
-              Ultimi vincitori
-            </span>
-            {tally.history.slice(0, 8).map((id, k) => {
-              const c = CONTENDERS.find((x) => x.id === id);
-              return c ? <NumberTile key={k} c={c} size={k === 0 ? 30 : 24} /> : null;
-            })}
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 px-[clamp(14px,1.4vw,28px)] py-3">
+          <div className="text-[clamp(12px,0.9vw,17px)] text-[var(--rc-cream)]/60">
+            Tutti i partenti hanno le stesse probabilità di vittoria.
           </div>
-        )}
-        <button
-          onClick={onStart}
-          disabled={disabled}
-          className="btn-shine font-display pointer-events-auto relative overflow-hidden rounded-full bg-gradient-to-b from-[#ff3b4a] to-[#b3121f] px-[clamp(28px,3vw,64px)] py-[clamp(10px,1vw,20px)] text-[clamp(24px,2.4vw,48px)] uppercase leading-none text-white shadow-[0_0_40px_rgba(255,42,60,.55),inset_0_1px_0_rgba(255,255,255,.4)] transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
-        >
-          <span className="inline-flex items-center gap-3">
-            <Flag className="h-[0.9em] w-[0.9em]" /> Partenza!
-          </span>
-        </button>
-        <div className="text-[clamp(10px,0.8vw,15px)] font-semibold uppercase tracking-[0.2em] text-white/45">
-          oppure premi <kbd className="rounded border border-white/25 px-1.5 py-0.5 font-mono">spazio</kbd>
+          <div className="flex items-center gap-4">
+            <span className="font-display text-[clamp(11px,0.8vw,15px)] uppercase tracking-[0.2em] text-[var(--rc-cream)]/45">
+              Premi{" "}
+              <kbd className="rounded-sm border border-white/25 px-1.5 py-0.5">
+                spazio
+              </kbd>
+            </span>
+            <button
+              onClick={onStart}
+              disabled={disabled}
+              className="font-display pointer-events-auto rounded-sm bg-[var(--rc-red)] px-[clamp(20px,2vw,40px)] py-[clamp(8px,0.7vw,14px)] text-[clamp(18px,1.5vw,28px)] font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#a50d26] disabled:opacity-50"
+            >
+              Avvia la corsa
+            </button>
+          </div>
         </div>
       </div>
     </motion.div>
@@ -458,85 +529,113 @@ export function Paddock({
 
 // ---------------------------------------------------------------------------
 
-export function Results({ snap, race, onNext }: { snap: Snapshot; race: number; onNext: () => void }) {
+export function Results({
+  snap,
+  race,
+  onNext,
+}: {
+  snap: Snapshot;
+  race: number;
+  onNext: () => void;
+}) {
   const order = snap.finishOrder;
   const winT = snap.finishTimes[order[0]];
   const w = CONTENDERS[order[0]];
-  const margin = order.length > 1 ? snap.finishTimes[order[1]] - winT : 0;
+  const nums = order.map((i) => CONTENDERS[i].number);
   return (
     <motion.div
-      initial={{ x: 80, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      exit={{ x: 80, opacity: 0 }}
-      transition={{ type: "spring", stiffness: 240, damping: 28, delay: 0.6 }}
-      className="hud-panel absolute bottom-[clamp(12px,1.6vw,28px)] right-[clamp(12px,1.6vw,28px)] top-[clamp(110px,10vw,180px)] z-30 flex w-[clamp(300px,31vw,600px)] flex-col overflow-hidden rounded-3xl"
+      initial={{ opacity: 0, x: 30 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.45, delay: 0.8 }}
+      className="hud-panel absolute z-30 flex w-[clamp(300px,30vw,580px)] flex-col overflow-hidden rounded-md"
+      style={{ right: EDGE, bottom: EDGE, top: "clamp(120px,10.5vw,190px)" }}
     >
-      <div
-        className="relative overflow-hidden px-[clamp(16px,1.6vw,32px)] py-[clamp(14px,1.4vw,28px)]"
-        style={{ background: `linear-gradient(135deg, ${w.hex}55, transparent 70%)` }}
-      >
-        <div className="text-[clamp(11px,0.85vw,16px)] font-bold uppercase tracking-[0.25em] text-white/60">
+      <div className="px-[clamp(16px,1.5vw,30px)] pb-3 pt-[clamp(12px,1.2vw,22px)]">
+        <Label className="!text-[var(--rc-gold)]">
           Arrivo ufficiale · Corsa N° {race}
+        </Label>
+        <div className="font-serif mt-1 text-[clamp(20px,1.8vw,34px)] font-semibold leading-tight text-[var(--rc-cream)]">
+          {raceName(race)}
         </div>
-        <div className="mt-3 flex items-center gap-[clamp(10px,1vw,20px)]">
-          <NumberTile c={w} size={84} />
+        <div className="mt-4 flex items-center gap-[clamp(10px,1vw,18px)]">
+          <Saddle c={w} size={72} />
           <div className="min-w-0">
-            <div className="flex items-center gap-2 text-[clamp(14px,1.1vw,22px)] font-bold uppercase tracking-[0.2em] text-[#ffd34d]">
-              <Trophy className="h-[1.1em] w-[1.1em]" /> Vincitore
-            </div>
-            <div
-              className="font-display truncate text-[clamp(40px,4.4vw,88px)] uppercase leading-[0.95]"
-              style={{ color: w.hex, textShadow: `0 0 40px ${w.hex}88` }}
-            >
+            <Label>Vincitore</Label>
+            <div className="font-display truncate text-[clamp(36px,3.6vw,70px)] font-bold uppercase leading-[0.95] tracking-wide text-[var(--rc-cream)]">
               {w.name}
             </div>
           </div>
         </div>
-        <div className="mt-2 text-[clamp(12px,0.95vw,18px)] font-semibold text-white/70">
-          Tempo {fmtTime(winT)} ·{" "}
-          {margin < 0.13 ? "vinto al fotofinish!" : `distacco ${fmtGap(margin)}`}
+        <div className="font-display mt-2 text-[clamp(13px,1vw,18px)] uppercase tracking-[0.12em] text-[var(--rc-cream)]/65">
+          Tempo {fmtTime(winT)}
         </div>
       </div>
+      <div className="hud-rule" />
 
-      <div className="flex flex-1 flex-col gap-[clamp(4px,0.5vw,10px)] overflow-y-auto px-[clamp(12px,1.2vw,24px)] py-[clamp(10px,1vw,20px)]">
+      <div className="flex flex-1 flex-col overflow-y-auto px-[clamp(10px,1vw,20px)] py-2">
         {order.map((i, pos) => {
           const c = CONTENDERS[i];
+          const gap =
+            pos === 0
+              ? ""
+              : marginLabel(
+                  snap.finishTimes[i] - snap.finishTimes[order[pos - 1]],
+                  winT,
+                );
           return (
             <motion.div
               key={c.id}
-              initial={{ x: 40, opacity: 0 }}
-              animate={{ x: 0, opacity: 1 }}
-              transition={{ delay: 0.9 + pos * 0.12 }}
-              className="flex items-center gap-3 rounded-xl px-3 py-[clamp(6px,0.6vw,12px)]"
-              style={{ background: pos === 0 ? `${c.hex}30` : "rgba(255,255,255,.04)" }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 1 + pos * 0.1 }}
+              className="flex items-center gap-3 border-b border-white/5 px-2 py-[clamp(6px,0.6vw,11px)] last:border-0"
             >
-              <span
-                className="font-display w-[1.7em] text-center text-[clamp(20px,1.8vw,36px)] leading-none"
-                style={{ color: pos < 3 ? MEDAL[pos] : "rgba(255,255,255,.5)" }}
-              >
+              <span className="font-display w-[1.6em] text-[clamp(18px,1.6vw,30px)] font-bold text-[var(--rc-cream)]/70">
                 {pos + 1}°
               </span>
-              <NumberTile c={c} size={36} />
-              <span className="font-display flex-1 truncate text-[clamp(18px,1.6vw,32px)] uppercase leading-none text-white">
+              <Saddle c={c} size={32} />
+              <span className="font-display flex-1 truncate text-[clamp(18px,1.5vw,28px)] font-semibold uppercase tracking-wide text-[var(--rc-cream)]">
                 {c.name}
               </span>
-              <span className="font-mono text-[clamp(12px,1vw,19px)] tabular-nums text-white/75">
-                {pos === 0 ? fmtTime(snap.finishTimes[i]) : fmtGap(snap.finishTimes[i] - winT)}
+              <span className="font-display text-[clamp(12px,0.95vw,17px)] text-[var(--rc-cream)]/65">
+                {gap}
               </span>
             </motion.div>
           );
         })}
       </div>
 
-      <div className="border-t border-white/10 p-[clamp(12px,1.2vw,24px)]">
+      <div className="grid grid-cols-3 gap-px border-t border-white/10 bg-white/10">
+        {[
+          { label: "Vincente", value: nums.slice(0, 1) },
+          { label: "Accoppiata", value: nums.slice(0, 2) },
+          { label: "Trio", value: nums.slice(0, 3) },
+        ].map((b) => (
+          <div
+            key={b.label}
+            className="bg-[rgba(8,13,11,.95)] px-3 py-2.5 text-center"
+          >
+            <Label>{b.label}</Label>
+            <div className="font-display mt-0.5 text-[clamp(20px,1.7vw,32px)] font-bold tracking-wider text-[var(--rc-cream)]">
+              {b.value.join(" – ")}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-white/10 p-[clamp(12px,1.1vw,22px)]">
         <button
           onClick={onNext}
-          className="btn-shine font-display relative w-full overflow-hidden rounded-full bg-gradient-to-b from-[#ff3b4a] to-[#b3121f] py-[clamp(10px,1vw,20px)] text-[clamp(22px,2vw,40px)] uppercase leading-none text-white shadow-[0_0_40px_rgba(255,42,60,.45),inset_0_1px_0_rgba(255,255,255,.4)] transition-transform hover:scale-[1.02] active:scale-95"
+          className="font-display w-full rounded-sm bg-[var(--rc-red)] py-[clamp(9px,0.8vw,16px)] text-[clamp(18px,1.5vw,28px)] font-bold uppercase tracking-[0.12em] text-white transition-colors hover:bg-[#a50d26]"
         >
-          Prossima corsa →
+          Prossima corsa
         </button>
-        <div className="mt-2 text-center text-[clamp(10px,0.75vw,14px)] font-semibold uppercase tracking-[0.2em] text-white/40">
-          oppure premi <kbd className="rounded border border-white/25 px-1.5 py-0.5 font-mono">spazio</kbd>
+        <div className="font-display mt-2 text-center text-[clamp(10px,0.75vw,14px)] uppercase tracking-[0.2em] text-[var(--rc-cream)]/40">
+          oppure premi{" "}
+          <kbd className="rounded-sm border border-white/25 px-1.5 py-0.5">
+            spazio
+          </kbd>
         </div>
       </div>
     </motion.div>
@@ -565,24 +664,29 @@ export function Controls({
   hidden: boolean;
 }) {
   const btn =
-    "pointer-events-auto flex h-10 w-10 items-center justify-center rounded-full text-white/75 transition hover:bg-white/10 hover:text-white";
+    "pointer-events-auto flex h-9 w-9 items-center justify-center rounded-sm text-[var(--rc-cream)]/70 transition hover:bg-white/10 hover:text-white";
   return (
     <div
-      className={`hud-panel absolute left-[clamp(12px,1.6vw,28px)] z-40 flex items-center gap-1 rounded-full p-1 transition-opacity duration-500 ${
+      className={`hud-panel absolute z-40 flex items-center gap-1 rounded-md p-1 transition-opacity duration-500 ${
         hidden ? "pointer-events-none opacity-0" : "opacity-100"
-      } bottom-[clamp(12px,1.6vw,28px)]`}
+      }`}
+      style={{ left: EDGE, bottom: EDGE }}
     >
       <button className={btn} onClick={onSound} title="Suoni (M)">
-        {sound ? <Volume2 size={18} /> : <VolumeX size={18} />}
+        {sound ? <Volume2 size={17} /> : <VolumeX size={17} />}
       </button>
       <button className={btn} onClick={onVoice} title="Telecronaca vocale (V)">
-        {voice ? <Mic size={18} /> : <MicOff size={18} />}
+        {voice ? <Mic size={17} /> : <MicOff size={17} />}
       </button>
       <button className={btn} onClick={onFullscreen} title="Schermo intero (F)">
-        {fullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+        {fullscreen ? <Minimize size={17} /> : <Maximize size={17} />}
       </button>
-      <button className={btn} onClick={onReset} title="Azzera serata (vittorie e numero corsa)">
-        <RotateCcw size={18} />
+      <button
+        className={btn}
+        onClick={onReset}
+        title="Azzera serata (vittorie, forma e numero corsa)"
+      >
+        <RotateCcw size={17} />
       </button>
     </div>
   );
@@ -591,21 +695,23 @@ export function Controls({
 export function Credit({ side = "right" }: { side?: "left" | "right" }) {
   return (
     <div
-      className={`pointer-events-none absolute bottom-[clamp(12px,1.6vw,28px)] z-10 flex items-center gap-1.5 rounded-full bg-black/35 px-3 py-1.5 text-xs text-white/60 ${
-        side === "right" ? "right-[clamp(12px,1.6vw,28px)]" : "left-[clamp(70px,5vw,96px)]"
-      }`}
+      className="pointer-events-none absolute z-10 flex items-center gap-1.5 text-xs text-white/45"
+      style={
+        side === "right"
+          ? { right: EDGE, bottom: 6 }
+          : { left: "clamp(70px,5vw,96px)", bottom: EDGE }
+      }
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        width="14"
-        height="14"
+        width="13"
+        height="13"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
         strokeWidth="2"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className="text-pink-400"
       >
         <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
         <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
@@ -619,17 +725,27 @@ export function Credit({ side = "right" }: { side?: "left" | "right" }) {
 export function Loading({ progress }: { progress: number }) {
   return (
     <motion.div
+      {...fade}
       initial={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
       transition={{ duration: 0.6 }}
-      className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-[#08030a]"
+      className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-5 bg-[#05080a]"
     >
-      <motion.div animate={{ rotate: 360 }} transition={{ duration: 6, repeat: Infinity, ease: "linear" }}>
-        <Image src="/indi-background.png" alt="" width={120} height={120} priority />
-      </motion.div>
-      <div className="font-display text-3xl uppercase text-white">Stiamo raffreddando i Campari…</div>
-      <div className="h-2 w-72 overflow-hidden rounded-full bg-white/10">
-        <div className="h-full bg-[#ff2a3c] transition-[width]" style={{ width: `${progress}%` }} />
+      <Image
+        src="/indi-background.png"
+        alt=""
+        width={84}
+        height={84}
+        priority
+      />
+      <div className="font-serif text-3xl font-semibold italic text-[var(--rc-cream)]">
+        Casino Campari Night
+      </div>
+      <Label>Preparazione della pista</Label>
+      <div className="h-[3px] w-64 bg-white/10">
+        <div
+          className="h-full bg-[var(--rc-gold)] transition-[width]"
+          style={{ width: `${progress}%` }}
+        />
       </div>
     </motion.div>
   );

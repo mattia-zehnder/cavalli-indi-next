@@ -19,7 +19,10 @@ Il primo click (o il primo tasto) attiva l'audio.
 | `M`              | Suoni on/off                                    |
 | `V`              | Telecronaca vocale on/off                       |
 
-- Il numero della corsa e l'albo d'oro (vittorie di ogni camparino) restano salvati anche se ricarichi la pagina.
+- Prima di ogni corsa c'è il **programma** (nome del premio, forma e vittorie della serata);
+  all'arrivo l'**ordine d'arrivo ufficiale** con i distacchi in lunghezze e le combinazioni
+  vincenti (vincente, accoppiata, trio).
+- Numero della corsa, vittorie e forma restano salvati anche se ricarichi la pagina.
   Per ripartire da zero c'è il pulsante ↺ in basso a sinistra (compare muovendo il mouse).
 - Funziona offline una volta avviato: niente CDN, suoni sintetizzati, texture disegnate al volo.
 - La telecronaca vocale usa la voce italiana del sistema/browser (su Chrome per macOS c'è).
@@ -35,9 +38,10 @@ mai chi è chi, quindi **ogni camparino ha sempre il 20% di probabilità di vinc
 
 ## Struttura
 
-- `lib/race/config.ts` — concorrenti (nomi, numeri, colori) e misure della pista
+- `lib/race/config.ts` — concorrenti (nomi, numeri, colori), nomi dei premi, misure della pista, distacchi
 - `lib/race/plan.ts` — generazione della gara e della telecronaca
-- `lib/race/engine.ts` — orologio di gara, countdown, slow‑motion, fotofinish
+- `lib/race/engine.ts` — orologio di gara, partenza, slow‑motion, fotofinish, posizioni in pista
+- `lib/race/tally.ts` — numero corsa, vittorie e forma della serata
 - `lib/race/audio.ts` — suoni (WebAudio) e voce
 - `components/race/*` — scena 3D (pista, bottiglie, regia) e HUD
 - `public/campari_soda_opt.glb` — modello ottimizzato (627 KB invece di 14,6 MB)

@@ -1,12 +1,13 @@
 "use client";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
-import { useFrame, useLoader } from "@react-three/fiber";
+import { useFrame } from "@react-three/fiber";
 import {
   CONTENDERS,
+  ENCLOSURE_X,
   FINISH_X,
+  KEEP_LANES,
   LANE_GAP,
-  PODIUM_X,
   RACE_METERS,
   START_X,
   TRACK_LEN,
@@ -16,154 +17,64 @@ import {
 import type { RaceEngine } from "@/lib/race/engine";
 import { mulberry32 } from "@/lib/race/plan";
 import {
-  checkerTexture,
-  laneNumberTexture,
+  boardTexture,
   markerTexture,
-  neonTexture,
   numberPlateTexture,
+  signTexture,
+  turfTexture,
 } from "./textures";
 
 const LANES = CONTENDERS.length;
 const HALF = trackHalfWidth(LANES);
 const TRACK_FROM = START_X - 14;
-const TRACK_TO = PODIUM_X + 14;
+const TRACK_TO = ENCLOSURE_X + 16;
+const RAIL_Z = HALF + 0.35;
+const dummy = new THREE.Object3D();
 
-const easeOutBack = (x: number) => {
-  const c1 = 1.5;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
-};
+const easeOut = (x: number) => 1 - Math.pow(1 - x, 3);
+
+// ---------------------------------------------------------------------------
 
 export function Ground() {
+  const turf = useMemo(() => {
+    const t = turfTexture();
+    // stripes ~4 units wide across the course
+    t.repeat.set((TRACK_TO - TRACK_FROM) / 32, 1);
+    return t;
+  }, []);
   return (
     <group>
       <mesh rotation-x={-Math.PI / 2} position={[10, -0.03, 0]}>
         <planeGeometry args={[420, 220]} />
-        <meshStandardMaterial color="#0b0507" roughness={0.95} />
+        <meshStandardMaterial color="#0e1c12" roughness={1} />
       </mesh>
-      {/* track surface */}
       <mesh rotation-x={-Math.PI / 2} position={[(TRACK_FROM + TRACK_TO) / 2, -0.01, 0]}>
-        <planeGeometry args={[TRACK_TO - TRACK_FROM, HALF * 2]} />
-        <meshStandardMaterial color="#1c0b0f" roughness={0.42} metalness={0.25} envMapIntensity={0.6} />
+        <planeGeometry args={[TRACK_TO - TRACK_FROM, HALF * 2 + 1.4]} />
+        <meshStandardMaterial map={turf} roughness={0.95} metalness={0} />
       </mesh>
-      {/* outer neon edges */}
-      {[-1, 1].map((s) => (
-        <mesh key={s} rotation-x={-Math.PI / 2} position={[(TRACK_FROM + TRACK_TO) / 2, 0.0, s * HALF]}>
-          <planeGeometry args={[TRACK_TO - TRACK_FROM, 0.1]} />
-          <meshBasicMaterial color={new THREE.Color("#ff2a3c").multiplyScalar(2.2)} toneMapped={false} />
-        </mesh>
-      ))}
-      {/* lane dividers */}
-      {Array.from({ length: LANES - 1 }, (_, k) => {
-        const z = laneZ(k, LANES) + LANE_GAP / 2;
-        return (
-          <mesh key={k} rotation-x={-Math.PI / 2} position={[(START_X + FINISH_X) / 2 + 2, 0.002, z]}>
-            <planeGeometry args={[TRACK_LEN + 6, 0.05]} />
-            <meshBasicMaterial color="#ffffff" transparent opacity={0.28} />
+      {/* faint lane dividers from the stalls to the line */}
+      {KEEP_LANES &&
+        Array.from({ length: LANES - 1 }, (_, k) => (
+          <mesh
+            key={k}
+            rotation-x={-Math.PI / 2}
+            position={[(START_X + FINISH_X) / 2 + 0.4, 0.002, laneZ(k, LANES) + LANE_GAP / 2]}
+          >
+            <planeGeometry args={[TRACK_LEN - 0.8, 0.05]} />
+            <meshBasicMaterial color="#ffffff" transparent opacity={0.22} depthWrite={false} />
           </mesh>
-        );
-      })}
-      {/* coloured lane tint + painted numbers */}
-      {CONTENDERS.map((c, i) => (
-        <LaneDecor key={c.id} lane={i} hex={c.hex} num={c.number} />
-      ))}
+        ))}
     </group>
   );
 }
 
-function LaneDecor({ lane, hex, num }: { lane: number; hex: string; num: number }) {
-  const tex = useMemo(() => laneNumberTexture(num, hex), [num, hex]);
-  const z = laneZ(lane, LANES);
-  return (
-    <group>
-      <mesh rotation-x={-Math.PI / 2} position={[(START_X + FINISH_X) / 2, 0.001, z]}>
-        <planeGeometry args={[TRACK_LEN, LANE_GAP - 0.1]} />
-        <meshBasicMaterial color={hex} transparent opacity={0.018} depthWrite={false} />
-      </mesh>
-      <mesh rotation-x={-Math.PI / 2} rotation-z={-Math.PI / 2} position={[START_X + 3.2, 0.004, z]}>
-        <planeGeometry args={[1.5, 1.5]} />
-        <meshBasicMaterial map={tex} transparent depthWrite={false} />
-      </mesh>
-    </group>
-  );
-}
-
-export function FinishLine() {
-  const tex = useMemo(() => checkerTexture(4, 30), []);
-  return (
-    <group position={[FINISH_X, 0, 0]}>
-      <mesh rotation-x={-Math.PI / 2} position={[0.6, 0.004, 0]}>
-        <planeGeometry args={[1.2, HALF * 2]} />
-        <meshStandardMaterial map={tex} roughness={0.6} />
-      </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[0, 0.006, 0]}>
-        <planeGeometry args={[0.09, HALF * 2]} />
-        <meshBasicMaterial color={new THREE.Color("#ffffff").multiplyScalar(3)} toneMapped={false} />
-      </mesh>
-      {/* winning post, far side (seen behind the runners in the photo) */}
-      <group position={[0, 0, -HALF - 0.55]}>
-        <mesh position={[0, 1.2, 0]}>
-          <cylinderGeometry args={[0.05, 0.05, 2.4, 10]} />
-          <meshStandardMaterial color="#f5f5f5" />
-        </mesh>
-        <mesh position={[0, 2.5, 0]} rotation-x={Math.PI / 2}>
-          <cylinderGeometry args={[0.42, 0.42, 0.06, 32]} />
-          <meshStandardMaterial color="#e11d2e" emissive="#e11d2e" emissiveIntensity={0.6} />
-        </mesh>
-        <mesh position={[0, 2.5, 0.035]} rotation-x={Math.PI / 2}>
-          <cylinderGeometry args={[0.18, 0.18, 0.01, 24]} />
-          <meshBasicMaterial color="#ffffff" />
-        </mesh>
-      </group>
-      <FinishTower />
-    </group>
-  );
-}
-
-function FinishTower() {
-  const sign = useMemo(() => neonTexture("TRAGUARDO", "#ffffff", 1024, 220), []);
-  const checker = useMemo(() => {
-    const t = checkerTexture(24, 2);
-    t.wrapS = t.wrapT = THREE.RepeatWrapping;
-    return t;
-  }, []);
-  const z = -HALF - 1.4;
-  return (
-    <group position={[0, 0, z]}>
-      {[-1.7, 1.7].map((x) => (
-        <mesh key={x} position={[x, 2.2, 0]}>
-          <boxGeometry args={[0.22, 4.4, 0.22]} />
-          <meshStandardMaterial color="#d6d6d6" metalness={0.6} roughness={0.3} />
-        </mesh>
-      ))}
-      <mesh position={[0, 4.5, 0]}>
-        <boxGeometry args={[4.2, 1.3, 0.2]} />
-        <meshStandardMaterial color="#0c0507" />
-      </mesh>
-      <mesh position={[0, 4.5, 0.11]}>
-        <planeGeometry args={[4, 1]} />
-        <meshBasicMaterial map={sign} transparent toneMapped={false} color={[1.6, 1.6, 1.6]} />
-      </mesh>
-      <mesh position={[0, 5.25, 0.11]}>
-        <planeGeometry args={[4.2, 0.25]} />
-        <meshBasicMaterial map={checker} />
-      </mesh>
-      <mesh position={[0, 3.75, 0.11]}>
-        <planeGeometry args={[4.2, 0.25]} />
-        <meshBasicMaterial map={checker} />
-      </mesh>
-    </group>
-  );
-}
-
-const dummy = new THREE.Object3D();
+// ---------------------------------------------------------------------------
 
 export function Rails() {
   const posts = useRef<THREE.InstancedMesh>(null);
-  const spacing = 2;
   const xs = useMemo(() => {
     const a: number[] = [];
-    for (let x = TRACK_FROM + 2; x <= TRACK_TO - 2; x += spacing) a.push(x);
+    for (let x = TRACK_FROM + 2; x <= TRACK_TO - 2; x += 2.2) a.push(x);
     return a;
   }, []);
   useEffect(() => {
@@ -172,7 +83,7 @@ export function Rails() {
     let i = 0;
     for (const s of [-1, 1])
       for (const x of xs) {
-        dummy.position.set(x, 0.45, s * (HALF + 0.35));
+        dummy.position.set(x, 0.42, s * RAIL_Z);
         dummy.updateMatrix();
         m.setMatrixAt(i++, dummy.matrix);
       }
@@ -181,24 +92,69 @@ export function Rails() {
   return (
     <group>
       <instancedMesh ref={posts} args={[undefined, undefined, xs.length * 2]}>
-        <boxGeometry args={[0.07, 0.9, 0.07]} />
-        <meshStandardMaterial color="#e9e9e9" roughness={0.4} />
+        <cylinderGeometry args={[0.04, 0.05, 0.84, 8]} />
+        <meshStandardMaterial color="#e8e8e4" roughness={0.5} />
       </instancedMesh>
       {[-1, 1].map((s) => (
-        <mesh key={s} position={[(TRACK_FROM + TRACK_TO) / 2, 0.92, s * (HALF + 0.35)]}>
-          <boxGeometry args={[TRACK_TO - TRACK_FROM - 3, 0.1, 0.14]} />
-          <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.25} roughness={0.3} />
+        <mesh key={s} position={[(TRACK_FROM + TRACK_TO) / 2, 0.9, s * RAIL_Z]} rotation-z={Math.PI / 2}>
+          <cylinderGeometry args={[0.07, 0.07, TRACK_TO - TRACK_FROM - 3, 12]} />
+          <meshStandardMaterial color="#f2f2ee" roughness={0.35} />
         </mesh>
       ))}
     </group>
   );
 }
 
-export function DistanceMarkers() {
-  const marks = [600, 400, 200, 100];
+// ---------------------------------------------------------------------------
+
+/** Advertising boards just behind the inside rail. */
+export function Boards() {
+  const logo = useMemo(() => {
+    if (typeof Image === "undefined") return undefined;
+    const img = new Image();
+    img.src = "/indi-background.png";
+    return img;
+  }, []);
+  const textures = useMemo(
+    () => [boardTexture("campari"), boardTexture("bar"), boardTexture("night"), boardTexture("logo", logo)],
+    [logo],
+  );
+  const items = useMemo(() => {
+    const a: { x: number; k: number }[] = [];
+    let k = 0;
+    for (let x = TRACK_FROM + 6; x < TRACK_TO - 4; x += 7.2) a.push({ x, k: k++ % 4 });
+    return a;
+  }, []);
   return (
     <group>
-      {marks.map((m) => (
+      {items.map(({ x, k }) => (
+        <group key={x} position={[x, 0, -RAIL_Z - 1.1]}>
+          <mesh position={[0, 0.55, 0]}>
+            <planeGeometry args={[6.4, 1]} />
+            <meshStandardMaterial
+              map={textures[k]}
+              roughness={0.6}
+              emissive="#ffffff"
+              emissiveMap={textures[k]}
+              emissiveIntensity={0.12}
+            />
+          </mesh>
+          <mesh position={[0, 0.55, -0.06]}>
+            <boxGeometry args={[6.45, 1.05, 0.08]} />
+            <meshStandardMaterial color="#1b1b1b" />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+export function DistanceMarkers() {
+  return (
+    <group>
+      {[600, 400, 200, 100].map((m) => (
         <Marker key={m} metersToGo={m} />
       ))}
     </group>
@@ -206,26 +162,72 @@ export function DistanceMarkers() {
 }
 
 function Marker({ metersToGo }: { metersToGo: number }) {
-  const tex = useMemo(
-    () => markerTexture(String(metersToGo), metersToGo <= 100 ? "#e11d2e" : "#1f1f1f"),
-    [metersToGo],
-  );
+  const tex = useMemo(() => markerTexture(String(metersToGo), metersToGo <= 100), [metersToGo]);
   const x = FINISH_X - (metersToGo / RACE_METERS) * TRACK_LEN;
   return (
-    <group position={[x, 0, HALF + 0.9]}>
-      <mesh position={[0, 0.9, 0]}>
-        <cylinderGeometry args={[0.05, 0.05, 1.8, 8]} />
-        <meshStandardMaterial color="#e5e5e5" />
+    <group position={[x, 0, -RAIL_Z - 0.4]}>
+      <mesh position={[0, 1.1, 0]}>
+        <cylinderGeometry args={[0.05, 0.05, 2.2, 8]} />
+        <meshStandardMaterial color="#f2f2ee" />
       </mesh>
-      <mesh position={[0, 2.1, 0]}>
-        <planeGeometry args={[1.1, 0.7]} />
-        <meshBasicMaterial map={tex} side={THREE.DoubleSide} toneMapped={false} />
+      <mesh position={[0, 2.45, 0.03]}>
+        <planeGeometry args={[0.95, 0.6]} />
+        <meshStandardMaterial map={tex} emissive="#ffffff" emissiveMap={tex} emissiveIntensity={0.25} />
       </mesh>
     </group>
   );
 }
 
-/** Starting stalls with front doors that spring open at "VIA!". */
+// ---------------------------------------------------------------------------
+
+export function FinishLine() {
+  const sign = useMemo(() => signTexture("ARRIVO", "#0f2a22", "#efe4c8", 512, 160), []);
+  return (
+    <group position={[FINISH_X, 0, 0]}>
+      {/* painted line */}
+      <mesh rotation-x={-Math.PI / 2} position={[0, 0.004, 0]}>
+        <planeGeometry args={[0.14, HALF * 2 + 1.2]} />
+        <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.35} />
+      </mesh>
+      {/* winning post on the inside rail */}
+      <group position={[0, 0, -RAIL_Z - 0.25]}>
+        <mesh position={[0, 1.4, 0]}>
+          <cylinderGeometry args={[0.06, 0.06, 2.8, 10]} />
+          <meshStandardMaterial color="#f2f2ee" />
+        </mesh>
+        <mesh position={[0, 2.9, 0]} rotation-x={Math.PI / 2}>
+          <cylinderGeometry args={[0.45, 0.45, 0.05, 40]} />
+          <meshStandardMaterial color="#c8102e" />
+        </mesh>
+        <mesh position={[0, 2.9, 0.03]} rotation-x={Math.PI / 2}>
+          <cylinderGeometry args={[0.2, 0.2, 0.01, 32]} />
+          <meshStandardMaterial color="#ffffff" />
+        </mesh>
+      </group>
+      {/* judges' box */}
+      <group position={[0, 0, -RAIL_Z - 3.2]}>
+        {[-1.3, 1.3].map((x) => (
+          <mesh key={x} position={[x, 2, 0]}>
+            <boxGeometry args={[0.16, 4, 0.16]} />
+            <meshStandardMaterial color="#e9e6dc" />
+          </mesh>
+        ))}
+        <mesh position={[0, 4.4, 0]}>
+          <boxGeometry args={[3.2, 1.4, 1.6]} />
+          <meshStandardMaterial color="#e9e6dc" roughness={0.6} />
+        </mesh>
+        <mesh position={[0, 4.4, 0.81]}>
+          <planeGeometry args={[2.9, 0.9]} />
+          <meshStandardMaterial map={sign} emissive="#ffffff" emissiveMap={sign} emissiveIntensity={0.25} />
+        </mesh>
+      </group>
+    </group>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** Starting stalls: front gates spring open at the start. */
 export function StartingGate({ engine }: { engine: RaceEngine }) {
   const doors = useRef<(THREE.Group | null)[]>([]);
   const frontX = START_X + 0.8;
@@ -238,60 +240,62 @@ export function StartingGate({ engine }: { engine: RaceEngine }) {
   useFrame(() => {
     const open =
       engine.phase === "running" || engine.phase === "finished"
-        ? easeOutBack(Math.min(1, Math.max(0, engine.t / 0.35)))
+        ? easeOut(Math.min(1, Math.max(0, engine.t / 0.3)))
         : 0;
     doors.current.forEach((d, k) => {
       if (!d) return;
       const side = k % 2 === 0 ? 1 : -1;
-      d.rotation.y = side * open * 1.75;
+      d.rotation.y = side * open * 1.65;
     });
   });
 
-  const metal = (
-    <meshStandardMaterial color="#d9d9de" metalness={0.7} roughness={0.28} />
-  );
+  const frame = <meshStandardMaterial color="#d8dad6" metalness={0.5} roughness={0.35} />;
+  const green = <meshStandardMaterial color="#1c3d30" roughness={0.7} />;
 
   return (
     <group>
-      {/* posts */}
       {boundaries.map((z) =>
         [frontX, backX].map((x) => (
           <mesh key={`${z}-${x}`} position={[x, 1.35, z]}>
             <boxGeometry args={[0.14, 2.7, 0.14]} />
-            {metal}
+            {frame}
           </mesh>
         )),
       )}
-      {/* stall partitions */}
+      {/* padded partitions */}
       {boundaries.map((z) => (
         <mesh key={`p${z}`} position={[(frontX + backX) / 2, 1.0, z]}>
-          <boxGeometry args={[frontX - backX, 1.3, 0.05]} />
-          <meshStandardMaterial color="#2a1216" metalness={0.3} roughness={0.6} />
+          <boxGeometry args={[frontX - backX, 1.4, 0.1]} />
+          {green}
         </mesh>
       ))}
-      {/* top beams */}
       {[frontX, backX].map((x) => (
         <mesh key={`b${x}`} position={[x, 2.72, 0]}>
           <boxGeometry args={[0.2, 0.2, width + 0.2]} />
-          {metal}
+          {frame}
         </mesh>
       ))}
       <mesh position={[(frontX + backX) / 2, 2.85, 0]}>
         <boxGeometry args={[frontX - backX + 0.2, 0.08, width + 0.2]} />
-        {metal}
+        {frame}
       </mesh>
-      {/* header with numbers */}
-      <mesh position={[frontX + 0.02, 3.25, 0]}>
-        <boxGeometry args={[0.12, 0.8, width + 0.2]} />
-        <meshStandardMaterial color="#b3121f" metalness={0.4} roughness={0.4} />
+      {/* header with stall numbers */}
+      <mesh position={[frontX + 0.02, 3.2, 0]}>
+        <boxGeometry args={[0.12, 0.75, width + 0.2]} />
+        {green}
       </mesh>
       {CONTENDERS.map((c, i) => (
-        <mesh key={c.id} position={[frontX + 0.09, 3.25, laneZ(i, LANES)]} rotation-y={Math.PI / 2}>
-          <planeGeometry args={[0.66, 0.66]} />
-          <meshBasicMaterial map={plates[i]} toneMapped={false} />
+        <mesh key={c.id} position={[frontX + 0.09, 3.2, laneZ(i, LANES)]} rotation-y={Math.PI / 2}>
+          <planeGeometry args={[0.6, 0.6]} />
+          <meshStandardMaterial
+            map={plates[i]}
+            emissive="#ffffff"
+            emissiveMap={plates[i]}
+            emissiveIntensity={0.2}
+          />
         </mesh>
       ))}
-      {/* doors */}
+      {/* front gates */}
       {CONTENDERS.map((c, i) => {
         const zc = laneZ(i, LANES);
         return [1, -1].map((s, j) => {
@@ -305,23 +309,19 @@ export function StartingGate({ engine }: { engine: RaceEngine }) {
               }}
             >
               <group position={[0, 0, s * (doorW / 2)]}>
-                {/* frame */}
-                <mesh position={[0, 1.55, 0]}>
-                  <boxGeometry args={[0.06, 0.07, doorW]} />
-                  <meshStandardMaterial color="#e11d2e" metalness={0.5} roughness={0.35} />
-                </mesh>
-                <mesh position={[0, 0.45, 0]}>
-                  <boxGeometry args={[0.06, 0.07, doorW]} />
-                  <meshStandardMaterial color="#e11d2e" metalness={0.5} roughness={0.35} />
-                </mesh>
+                {[0.45, 1.0, 1.55].map((y) => (
+                  <mesh key={y} position={[0, y, 0]}>
+                    <boxGeometry args={[0.05, 0.06, doorW]} />
+                    {frame}
+                  </mesh>
+                ))}
                 <mesh position={[0, 1.0, s * (doorW / 2 - 0.03)]}>
-                  <boxGeometry args={[0.06, 1.17, 0.06]} />
-                  <meshStandardMaterial color="#e11d2e" metalness={0.5} roughness={0.35} />
+                  <boxGeometry args={[0.05, 1.16, 0.06]} />
+                  {frame}
                 </mesh>
-                {/* see-through panel */}
                 <mesh position={[0, 1.0, 0]}>
                   <boxGeometry args={[0.02, 1.08, doorW - 0.04]} />
-                  <meshStandardMaterial color={c.hex} transparent opacity={0.22} depthWrite={false} />
+                  <meshStandardMaterial color="#0d1f18" transparent opacity={0.35} depthWrite={false} />
                 </mesh>
               </group>
             </group>
@@ -332,25 +332,34 @@ export function StartingGate({ engine }: { engine: RaceEngine }) {
   );
 }
 
-const ROWS = 6;
+// ---------------------------------------------------------------------------
+
+const ROWS = 7;
 const COUNT = ROWS * 190;
 const standFrom = TRACK_FROM - 24;
 const standTo = TRACK_TO + 14;
-const tierZ = (k: number) => -HALF - 4.6 - k * 1.05;
-const tierTop = (k: number) => 0.45 + k * 0.6;
-const POLE_GAP = 12;
-const lightsZ = -HALF - 3.4;
+const tierZ = (k: number) => -RAIL_Z - 4.2 - k * 1.05;
+const tierTop = (k: number) => 0.5 + k * 0.6;
 
-/** Grandstand behind the far rail: cheering crowd, festival lights, neon signs. */
+/** Grandstand behind the inside rail, with the crowd and floodlights. */
 export function Backdrop({ engine }: { engine: RaceEngine }) {
   const crowd = useRef<THREE.InstancedMesh>(null);
   const heads = useRef<THREE.InstancedMesh>(null);
-  const bulbs = useRef<THREE.InstancedMesh>(null);
 
-  // fixed seat positions + shirt colours (deterministic)
   const people = useMemo(() => {
     const rnd = mulberry32(7);
-    const shirts = ["#7a1f2b", "#d9d2c5", "#2b3a55", "#a33a2a", "#3d3d3d", "#c78a3b", "#5b2a4e", "#e8e1d4", "#1f4d3a"];
+    const shirts = [
+      "#3a3f4a",
+      "#d9d2c5",
+      "#2b3a55",
+      "#6b2a2a",
+      "#2e2e2e",
+      "#8a7a5c",
+      "#46384f",
+      "#e8e1d4",
+      "#1f3d33",
+      "#5c5c5c",
+    ];
     return Array.from({ length: COUNT }, (_, i) => {
       const row = i % ROWS;
       return {
@@ -359,25 +368,10 @@ export function Backdrop({ engine }: { engine: RaceEngine }) {
         z: tierZ(row) + (rnd() - 0.5) * 0.3,
         s: 0.85 + rnd() * 0.3,
         phase: rnd() * Math.PI * 2,
-        freq: 5 + rnd() * 4,
-        color: new THREE.Color(shirts[Math.floor(rnd() * shirts.length)]).multiplyScalar(0.55 + rnd() * 0.5),
+        freq: 3 + rnd() * 3,
+        color: new THREE.Color(shirts[Math.floor(rnd() * shirts.length)]).multiplyScalar(0.5 + rnd() * 0.5),
       };
     });
-  }, []);
-
-  // festival lights ("luminarie") hanging between poles
-  const bulbPos = useMemo(() => {
-    const a: { x: number; y: number }[] = [];
-    for (let x = standFrom; x <= standTo; x += 0.75) {
-      const u = ((x - standFrom) % POLE_GAP) / POLE_GAP;
-      a.push({ x, y: 4.3 - 0.7 * (1 - Math.pow(2 * u - 1, 2)) });
-    }
-    return a;
-  }, []);
-  const poles = useMemo(() => {
-    const a: number[] = [];
-    for (let x = standFrom; x <= standTo; x += POLE_GAP) a.push(x);
-    return a;
   }, []);
 
   useEffect(() => {
@@ -388,218 +382,181 @@ export function Backdrop({ engine }: { engine: RaceEngine }) {
       const skins = ["#e8b896", "#c68e6a", "#f1c9a5", "#8d5a3c", "#d9a47e"].map((c) => new THREE.Color(c));
       people.forEach((_, i) => h.setColorAt(i, skins[i % skins.length]));
     }
-    const b = bulbs.current;
-    if (b) {
-      bulbPos.forEach((p, i) => {
-        dummy.position.set(p.x, p.y, lightsZ);
-        dummy.scale.setScalar(1);
-        dummy.updateMatrix();
-        b.setMatrixAt(i, dummy.matrix);
-      });
-      b.instanceMatrix.needsUpdate = true;
-    }
-  }, [people, bulbPos]);
+  }, [people]);
 
   const tmp = useMemo(() => new THREE.Color(), []);
   const flashes = useRef<{ i: number; t: number }[]>([]);
-  const excite = useRef(0.3);
-  const bulbColors = useMemo(
-    () => ["#ffd27a", "#ff5a5a", "#ffe9b0", "#ff9f40"].map((c) => new THREE.Color(c)),
-    [],
-  );
+  const excite = useRef(0.1);
 
   useFrame(({ clock }, dt) => {
     const time = clock.elapsedTime;
     const lead = Math.max(...engine.progress);
     const target =
-      engine.phase === "paddock"
-        ? 0.15
-        : engine.phase === "countdown"
-          ? 0.35
-          : engine.phase === "finished"
-            ? 0.7
-            : 0.3 + 0.7 * Math.min(1, Math.max(0, (lead - 0.5) / 0.45));
+      engine.phase === "running"
+        ? 0.05 + 0.95 * Math.min(1, Math.max(0, (lead - 0.7) / 0.3))
+        : engine.phase === "finished"
+          ? Math.max(0, 0.6 - engine.phaseTime * 0.08)
+          : 0;
     excite.current += (target - excite.current) * (1 - Math.exp(-dt * 2));
     const ex = excite.current;
 
     const m = crowd.current;
-    if (m) {
+    const h = heads.current;
+    if (m && h) {
       for (let i = 0; i < COUNT; i++) {
         const p = people[i];
-        const jump = Math.max(0, Math.sin(time * p.freq + p.phase)) * 0.28 * ex;
-        dummy.position.set(p.x, p.y + jump, p.z);
-        dummy.scale.set(p.s, p.s, p.s);
+        // standing up and waving in the closing stages
+        const lift = Math.max(0, Math.sin(time * p.freq + p.phase)) * 0.12 * ex + ex * 0.08;
+        dummy.position.set(p.x, p.y + lift, p.z);
+        dummy.scale.setScalar(p.s);
         dummy.updateMatrix();
         m.setMatrixAt(i, dummy.matrix);
-        if (heads.current) {
-          dummy.position.y += 0.42 * p.s;
-          dummy.updateMatrix();
-          heads.current.setMatrixAt(i, dummy.matrix);
-        }
+        dummy.position.y += 0.42 * p.s;
+        dummy.updateMatrix();
+        h.setMatrixAt(i, dummy.matrix);
       }
       m.instanceMatrix.needsUpdate = true;
-      if (heads.current) heads.current.instanceMatrix.needsUpdate = true;
+      h.instanceMatrix.needsUpdate = true;
 
-      // phone camera flashes, more of them when it gets exciting
-      if (Math.random() < 0.2 + ex * 0.9) flashes.current.push({ i: Math.floor(Math.random() * COUNT), t: 0.09 });
+      // a few camera flashes
+      if (Math.random() < 0.05 + ex * 0.5) flashes.current.push({ i: Math.floor(Math.random() * COUNT), t: 0.07 });
       flashes.current = flashes.current.filter((f) => {
         f.t -= dt;
-        m.setColorAt(f.i, f.t > 0 ? tmp.setRGB(6, 6, 6) : people[f.i].color);
+        m.setColorAt(f.i, f.t > 0 ? tmp.setRGB(5, 5, 5) : people[f.i].color);
         return f.t > 0;
       });
       if (m.instanceColor) m.instanceColor.needsUpdate = true;
     }
-
-    const b = bulbs.current;
-    if (b) {
-      bulbPos.forEach((_, i) => {
-        const chase = 0.55 + 0.45 * Math.sin(time * 3 - i * 0.35);
-        tmp.copy(bulbColors[i % bulbColors.length]).multiplyScalar(1.2 + 2.2 * chase);
-        b.setColorAt(i, tmp);
-      });
-      if (b.instanceColor) b.instanceColor.needsUpdate = true;
-    }
   });
 
-  const signs = useMemo(
-    () => [
-      neonTexture("CASINO CAMPARI NIGHT", "#ff2a3c"),
-      neonTexture("BAR INDIPENDENZA · BRONI", "#ffb347"),
-    ],
-    [],
-  );
-  const star = useLoader(THREE.TextureLoader, "/indi-background.png");
-  const signZ = tierZ(ROWS - 1) - 1.4;
-  const signXs = [-66, -24, 18, 60, 102];
+  const roofY = tierTop(ROWS - 1) + 2.6;
+  const backZ = tierZ(ROWS - 1) - 0.8;
+  const towers = [-58, -14, 30, 74, 118];
 
   return (
     <group>
-      {/* grass strip between the far rail and the stand */}
-      <mesh rotation-x={-Math.PI / 2} position={[(standFrom + standTo) / 2, -0.005, -HALF - 2.4]}>
-        <planeGeometry args={[standTo - standFrom, 3.4]} />
-        <meshStandardMaterial color="#0f1a10" roughness={1} />
-      </mesh>
-      {/* tiers */}
       {Array.from({ length: ROWS }, (_, k) => (
         <mesh key={k} position={[(standFrom + standTo) / 2, tierTop(k) / 2, tierZ(k)]}>
           <boxGeometry args={[standTo - standFrom, tierTop(k), 1.05]} />
-          <meshStandardMaterial color={k % 2 ? "#1d0b10" : "#24101a"} roughness={0.9} />
+          <meshStandardMaterial color={k % 2 ? "#1d211f" : "#232826"} roughness={0.9} />
         </mesh>
       ))}
-      <mesh position={[(standFrom + standTo) / 2, tierTop(0) + 0.01, tierZ(0) + 0.53]}>
-        <boxGeometry args={[standTo - standFrom, 0.05, 0.05]} />
-        <meshBasicMaterial color={new THREE.Color("#ff2a3c").multiplyScalar(3)} toneMapped={false} />
+      <mesh position={[(standFrom + standTo) / 2, roofY / 2, backZ]}>
+        <boxGeometry args={[standTo - standFrom, roofY, 0.4]} />
+        <meshStandardMaterial color="#171b19" roughness={0.95} />
       </mesh>
-      {/* back wall */}
-      <mesh position={[(standFrom + standTo) / 2, 3.2, signZ - 0.4]}>
-        <boxGeometry args={[standTo - standFrom, 6.4, 0.3]} />
-        <meshStandardMaterial color="#140709" roughness={0.95} />
+      {/* roof */}
+      <mesh position={[(standFrom + standTo) / 2, roofY, (tierZ(0) + backZ) / 2 - 0.3]} rotation-x={0.08}>
+        <boxGeometry args={[standTo - standFrom, 0.18, tierZ(0) - backZ + 1.5]} />
+        <meshStandardMaterial color="#262b29" roughness={0.8} />
       </mesh>
-      {/* crowd */}
+      {/* roof fascia */}
+      <mesh position={[(standFrom + standTo) / 2, roofY - 0.25, tierZ(0) + 0.1]}>
+        <boxGeometry args={[standTo - standFrom, 0.5, 0.12]} />
+        <meshStandardMaterial color="#0f2a22" roughness={0.7} />
+      </mesh>
+      <mesh position={[(standFrom + standTo) / 2, roofY - 0.48, tierZ(0) + 0.17]}>
+        <boxGeometry args={[standTo - standFrom, 0.04, 0.02]} />
+        <meshStandardMaterial color="#b8975a" metalness={0.6} roughness={0.4} />
+      </mesh>
+      {/* roof columns */}
+      {Array.from({ length: Math.floor((standTo - standFrom) / 12) }, (_, k) => standFrom + 6 + k * 12).map(
+        (x) => (
+          <mesh key={x} position={[x, roofY / 2, tierZ(0) + 0.2]}>
+            <boxGeometry args={[0.25, roofY, 0.25]} />
+            <meshStandardMaterial color="#2c312f" />
+          </mesh>
+        ),
+      )}
       <instancedMesh ref={crowd} args={[undefined, undefined, COUNT]} frustumCulled={false}>
         <capsuleGeometry args={[0.19, 0.28, 3, 8]} />
-        <meshStandardMaterial roughness={0.8} />
+        <meshStandardMaterial roughness={0.85} />
       </instancedMesh>
       <instancedMesh ref={heads} args={[undefined, undefined, COUNT]} frustumCulled={false}>
         <sphereGeometry args={[0.13, 8, 6]} />
         <meshStandardMaterial roughness={0.7} />
       </instancedMesh>
-      {/* festival lights */}
-      {poles.map((x) => (
-        <mesh key={x} position={[x, 2.25, lightsZ]}>
-          <cylinderGeometry args={[0.05, 0.05, 4.5, 6]} />
-          <meshStandardMaterial color="#3a2a2a" />
-        </mesh>
+      {/* floodlight towers */}
+      {towers.map((x) => (
+        <group key={x} position={[x, 0, backZ - 4]}>
+          <mesh position={[0, 9, 0]}>
+            <cylinderGeometry args={[0.22, 0.35, 18, 10]} />
+            <meshStandardMaterial color="#3a3f3d" metalness={0.5} roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 18.4, 0.3]} rotation-x={0.35}>
+            <boxGeometry args={[3.6, 2, 0.3]} />
+            <meshStandardMaterial color="#2a2e2c" />
+          </mesh>
+          <mesh position={[0, 18.4, 0.47]} rotation-x={0.35}>
+            <planeGeometry args={[3.3, 1.7]} />
+            <meshBasicMaterial color={[6, 6, 5.4]} toneMapped={false} fog={false} />
+          </mesh>
+        </group>
       ))}
-      <instancedMesh ref={bulbs} args={[undefined, undefined, bulbPos.length]} frustumCulled={false}>
-        <sphereGeometry args={[0.09, 8, 6]} />
-        <meshBasicMaterial toneMapped={false} />
-      </instancedMesh>
-      {/* neon signs on the back wall */}
-      {signXs.map((x, k) =>
-        k % 2 === 0 ? (
-          <mesh key={x} position={[x, 4.7, signZ]}>
-            <planeGeometry args={[16, 2]} />
-            <meshBasicMaterial
-              map={signs[(k / 2) % 2]}
-              transparent
-              toneMapped={false}
-              color={[1.15, 1.15, 1.15]}
-              fog={false}
-            />
-          </mesh>
-        ) : (
-          <mesh key={x} position={[x, 4.7, signZ]}>
-            <planeGeometry args={[3.4, 3.4]} />
-            <meshBasicMaterial
-              map={star}
-              map-colorSpace={THREE.SRGBColorSpace}
-              transparent
-              toneMapped={false}
-              color={[1.6, 1.6, 1.6]}
-              fog={false}
-            />
-          </mesh>
-        ),
-      )}
     </group>
   );
 }
 
-/** Podium beyond the finish line, revealed at the end of the race. */
-export const PODIUM_SLOTS = [
-  { x: PODIUM_X, h: 1.4 }, // 1st
-  { x: PODIUM_X - 2.3, h: 0.95 }, // 2nd
-  { x: PODIUM_X + 2.3, h: 0.6 }, // 3rd
+// ---------------------------------------------------------------------------
+
+/** Winners' enclosure past the line, with the 1st/2nd/3rd boards. */
+export const ENCLOSURE_SLOTS = [
+  { x: ENCLOSURE_X, z: 0 }, // 1st
+  { x: ENCLOSURE_X - 2.4, z: 0.45 }, // 2nd
+  { x: ENCLOSURE_X + 2.4, z: 0.45 }, // 3rd
 ];
 
-export function Podium({ engine }: { engine: RaceEngine }) {
+export function Enclosure({ engine }: { engine: RaceEngine }) {
   const spot = useRef<THREE.SpotLight>(null);
   const target = useMemo(() => {
     const o = new THREE.Object3D();
-    o.position.set(PODIUM_X, 1, 0);
+    o.position.set(ENCLOSURE_X, 0.8, 0.2);
     return o;
   }, []);
-  const plates = useMemo(
+  const signs = useMemo(
     () => [
-      numberPlateTexture(1, "#d4a017", "#1a1206"),
-      numberPlateTexture(2, "#b8bcc6", "#16181c"),
-      numberPlateTexture(3, "#b36b2c", "#1a0f06"),
+      signTexture("1°", "#b8975a", "#111"),
+      signTexture("2°", "#f4f1ea", "#111"),
+      signTexture("3°", "#f4f1ea", "#111"),
     ],
     [],
   );
-  const tops = ["#ffd34d", "#e5e7eb", "#d98b45"];
   useFrame((_, dt) => {
     if (!spot.current) return;
-    const on = engine.phase === "finished" ? 220 : 0;
-    spot.current.intensity += (on - spot.current.intensity) * (1 - Math.exp(-dt * 3));
+    const on = engine.phase === "finished" ? 160 : 0;
+    spot.current.intensity += (on - spot.current.intensity) * (1 - Math.exp(-dt * 2));
   });
   return (
     <group>
-      {PODIUM_SLOTS.map((s, i) => (
-        <group key={i} position={[s.x, 0, 0]}>
-          <mesh position={[0, s.h / 2, 0]}>
-            <boxGeometry args={[2.1, s.h, 2.1]} />
-            <meshStandardMaterial color="#160a0d" metalness={0.4} roughness={0.35} />
+      {/* paved ring */}
+      <mesh rotation-x={-Math.PI / 2} position={[ENCLOSURE_X, 0.003, 0.2]}>
+        <circleGeometry args={[4.1, 64]} />
+        <meshStandardMaterial color="#3b3a34" roughness={0.95} />
+      </mesh>
+      <mesh rotation-x={-Math.PI / 2} position={[ENCLOSURE_X, 0.005, 0.2]}>
+        <ringGeometry args={[3.95, 4.1, 64]} />
+        <meshStandardMaterial color="#e9e6dc" />
+      </mesh>
+      {ENCLOSURE_SLOTS.map((s, i) => (
+        <group key={i} position={[s.x, 0, s.z - 1]}>
+          <mesh position={[0, 1.25, 0]}>
+            <cylinderGeometry args={[0.05, 0.05, 2.5, 8]} />
+            <meshStandardMaterial color="#e9e6dc" />
           </mesh>
-          <mesh position={[0, s.h + 0.02, 0]}>
-            <boxGeometry args={[2.16, 0.06, 2.16]} />
-            <meshStandardMaterial color={tops[i]} emissive={tops[i]} emissiveIntensity={0.5} metalness={0.8} roughness={0.25} />
-          </mesh>
-          <mesh position={[0, s.h / 2, 1.06]}>
-            <planeGeometry args={[Math.min(0.9, s.h * 0.8), Math.min(0.9, s.h * 0.8)]} />
-            <meshBasicMaterial map={plates[i]} toneMapped={false} />
+          <mesh position={[0, 2.5, 0.02]}>
+            <planeGeometry args={[0.8, 0.5]} />
+            <meshStandardMaterial map={signs[i]} emissive="#ffffff" emissiveMap={signs[i]} emissiveIntensity={0.25} />
           </mesh>
         </group>
       ))}
       <primitive object={target} />
       <spotLight
         ref={spot}
-        position={[PODIUM_X, 12, 6]}
-        angle={0.42}
-        penumbra={0.6}
+        position={[ENCLOSURE_X, 13, 7]}
+        angle={0.4}
+        penumbra={0.7}
         intensity={0}
-        color="#fff1d6"
+        color="#fff4e0"
         target={target}
         decay={1.6}
       />

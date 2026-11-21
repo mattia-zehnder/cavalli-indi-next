@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Anton, Geist, Geist_Mono } from "next/font/google";
+import { Barlow_Condensed, Geist, Geist_Mono, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,19 +12,26 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const display = Anton({
+const display = Barlow_Condensed({
   variable: "--font-display",
-  weight: "400",
+  weight: ["500", "600", "700"],
+  subsets: ["latin"],
+});
+
+const serif = Playfair_Display({
+  variable: "--font-serif",
+  weight: ["600", "700"],
+  style: ["normal", "italic"],
   subsets: ["latin"],
 });
 
 export const metadata: Metadata = {
   title: "Casino Campari Night - Bar Indipendenza",
-  description: "Le corse dei camparini al Bar Indipendenza di Broni. Scegli il tuo e fai il tifo!",
+  description: "Le corse dei camparini all'Ippodromo del Bar Indipendenza, Broni.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#08030a",
+  themeColor: "#05080a",
 };
 
 export default function RootLayout({
@@ -35,7 +42,7 @@ export default function RootLayout({
   return (
     <html lang="it">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${display.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} ${display.variable} ${serif.variable} antialiased`}
       >
         {children}
       </body>

@@ -1,10 +1,16 @@
-// The night's "albo d'oro": race number + wins per camparino.
-// Kept in localStorage so an accidental refresh doesn't lose the evening.
+// The night's record: race number, wins per runner and every finishing order
+// (for the "form" column of the racecard). Kept in localStorage so an
+// accidental refresh doesn't lose the evening.
 
-export type Tally = { race: number; wins: Record<number, number>; history: number[] };
+export type Tally = {
+  race: number;
+  wins: Record<number, number>;
+  history: number[]; // winners' ids, most recent first
+  results: number[][]; // finishing orders (ids), most recent first
+};
 
 const STORAGE_KEY = "campari-night-v2";
-const EMPTY: Tally = { race: 1, wins: {}, history: [] };
+const EMPTY: Tally = { race: 1, wins: {}, history: [], results: [] };
 
 let current: Tally | null = null;
 const listeners = new Set<() => void>();
@@ -13,11 +19,22 @@ function load(): Tally {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const t = JSON.parse(raw) as Tally;
-      if (typeof t.race === "number" && t.wins && Array.isArray(t.history)) return t;
+      const t = JSON.parse(raw) as Partial<Tally>;
+      if (typeof t.race === "number" && t.wins && Array.isArray(t.history)) {
+        return { ...EMPTY, ...t, results: Array.isArray(t.results) ? t.results : [] } as Tally;
+      }
     }
   } catch {}
   return EMPTY;
+}
+
+/** Finishing positions of a runner in the last races, oldest first (e.g. [3, 1, 2]). */
+export function formOf(t: Tally, id: number, last = 5): number[] {
+  return t.results
+    .slice(0, last)
+    .map((order) => order.indexOf(id) + 1)
+    .filter((p) => p > 0)
+    .reverse();
 }
 
 export const tallyStore = {

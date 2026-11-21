@@ -15,10 +15,10 @@ import {
 } from "@/lib/race/config";
 import type { RaceEngine } from "@/lib/race/engine";
 import type { ParticlePool } from "./Fx";
-import { PODIUM_SLOTS } from "./World";
-import { blobTexture, glowTexture, labelTexture } from "./textures";
+import { ENCLOSURE_SLOTS } from "./World";
+import { blobTexture, saddleClothTexture, tagTexture } from "./textures";
 
-const STRIDE = 1.25; // world units per hop
+const STRIDE = 1.45; // world units per galloping stride
 const AVG_SPEED = TRACK_LEN / 23;
 const BOTTLE_YAW = -Math.PI / 2; // turns the Campari logo towards the side camera
 
@@ -34,10 +34,10 @@ function useBottleScene() {
       const mesh = o as THREE.Mesh;
       if (!mesh.isMesh) return;
       const m = (mesh.material as THREE.MeshStandardMaterial).clone();
-      // glossier glass so the studio lights show on the bottle
-      m.roughness = 0.32;
+      // glossier glass so the floodlights show on the bottle
+      m.roughness = 0.3;
       m.metalness = 0.05;
-      m.envMapIntensity = 1.4;
+      m.envMapIntensity = 1.3;
       mesh.material = m;
     });
     return scene;
@@ -45,257 +45,148 @@ function useBottleScene() {
 }
 
 const blobTex = typeof document !== "undefined" ? blobTexture() : null;
-const glowTex = typeof document !== "undefined" ? glowTexture() : null;
+const TURF = ["#2a4a2c", "#3b3226", "#24402a", "#4a3d2c"].map((c) => new THREE.Color(c));
 
 type Props = {
   engine: RaceEngine;
   index: number;
   contender: Contender;
   lanes: number;
-  fizz: ParticlePool;
-  confetti: ParticlePool;
+  turf: ParticlePool;
 };
 
-export function Bottle({ engine, index, contender, lanes, fizz, confetti }: Props) {
+export function Bottle({ engine, index, contender, lanes, turf }: Props) {
   const scene = useBottleScene();
   const root = useRef<THREE.Group>(null);
   const body = useRef<THREE.Group>(null);
   const shadow = useRef<THREE.Mesh>(null);
-  const ring = useRef<THREE.Mesh>(null);
-  const glow = useRef<THREE.Mesh>(null);
-  const label = useRef<THREE.Sprite>(null);
+  const tag = useRef<THREE.Sprite>(null);
 
-  const color = useMemo(() => new THREE.Color(contender.hex), [contender.hex]);
-  const neon = useMemo(() => new THREE.Color(contender.hex).multiplyScalar(2.4), [contender.hex]);
-  const white = useMemo(() => new THREE.Color("#fff6f0"), []);
-  const confettiColors = useMemo(
-    () => [color, white, new THREE.Color("#ffd34d"), new THREE.Color("#e11d2e")],
-    [color, white],
-  );
-  const labelTex = useMemo(
-    () => labelTexture(contender.number, contender.name, contender.hex),
-    [contender],
-  );
+  const tagTex = useMemo(() => tagTexture(contender.number, contender.name, contender.hex), [contender]);
+  const clothTex = useMemo(() => saddleClothTexture(contender.number, contender.hex), [contender]);
   const z0 = laneZ(index, lanes);
 
   const s = useRef({
     x: START_X,
-    hop: index * 0.37,
+    stride: index * 0.29,
     amp: 0,
     lean: 0,
-    ringPulse: 0,
     raceId: -1,
-    runoutX: START_X,
-    podiumStart: null as null | THREE.Vector3,
-    nextConfetti: 0,
-    labelIn: 0,
+    walkFrom: null as null | THREE.Vector3,
+    tagIn: 0,
+    yaw: 0,
   });
 
   useFrame(({ clock, camera }, rawDt) => {
     const st = s.current;
     if (!root.current || !body.current) return;
-    if (engine.freeze > 0) return; // photo-finish freeze: hold the pose
+    if (engine.freeze > 0) {
+      // photo-finish freeze: hold the pose, only the saddle cloths identify them
+      if (tag.current) tag.current.visible = false;
+      return;
+    }
     const dt = Math.min(rawDt, 0.05);
     const time = clock.elapsedTime;
 
     if (st.raceId !== engine.raceId) {
       st.raceId = engine.raceId;
       st.x = START_X;
-      st.podiumStart = null;
+      st.walkFrom = null;
       st.amp = 0;
       st.lean = 0;
+      st.yaw = 0;
     }
 
-    const baseX = engine.phase === "paddock" || engine.phase === "countdown" ? START_X : worldX(engine.progress[index]);
+    const inStalls = engine.phase === "paddock" || engine.phase === "countdown";
+    const baseX = inStalls ? START_X : worldX(engine.progress[index]);
     let x = baseX;
+    let z = inStalls ? z0 : engine.lateral[index];
     let y = 0;
-    let z = z0;
-    let sy = 1;
-    let lean = 0;
-    let roll = 0;
-    let yaw = 0;
-    let tip = 0;
-    let floor = 0; // height of whatever the bottle stands on (track or podium step)
-    let labelVisible = true;
+    let pitch = 0;
+    let yawTarget = 0;
+    let tagVisible = true;
     const place = engine.phase === "finished" ? engine.placeOf(index) : -1;
-    const onPodium = place >= 0 && place < 3;
+    const toEnclosure = place >= 0 && place < 3;
 
     if (engine.phase === "paddock") {
-      x = START_X;
-      const b = Math.abs(Math.sin(time * 2.6 + index * 1.3));
-      y = 0.05 * b;
-      sy = 1 + 0.03 * Math.sin(time * 5.2 + index);
-      yaw = Math.sin(time * 0.9 + index) * 0.25;
+      // standing in the stall, shifting a little
+      pitch = Math.sin(time * 1.3 + index * 1.7) * 0.015;
+      yawTarget = Math.sin(time * 0.5 + index) * 0.08;
     } else if (engine.phase === "countdown") {
-      x = START_X;
-      const urgency = clamp01(1 + engine.t / 3.5); // 0 → 1
-      sy = 1 - 0.12 * urgency; // crouch before the jump
-      y = Math.abs(Math.sin(time * (9 + urgency * 8) + index)) * 0.04;
-      roll = Math.sin(time * 14 + index) * 0.03 * urgency;
+      pitch = Math.sin(time * 3.1 + index) * 0.02;
     } else {
       const dx = baseX - st.x;
       const raceDt = dt * Math.max(engine.timeScale, 0.05);
-      const raceSpeed = dt > 0 ? dx / raceDt : 0;
-      const rel = raceSpeed / AVG_SPEED;
+      const rel = raceDt > 0 ? dx / raceDt / AVG_SPEED : 0;
 
-      const prev = st.hop;
-      st.hop += Math.max(0, dx) / STRIDE;
-      const landed = Math.floor(st.hop) !== Math.floor(prev);
-      const f = st.hop % 1;
+      const prev = st.stride;
+      st.stride += Math.max(0, dx) / STRIDE;
+      const landed = Math.floor(st.stride) !== Math.floor(prev);
+      const f = st.stride % 1;
 
-      st.amp = damp(st.amp, 0.34 * Math.min(1.5, Math.max(0, rel)), 6, dt);
-      const air = Math.sin(Math.PI * f);
-      const ground = 1 - air;
-      const k = Math.min(1.2, st.amp / 0.34);
-      y = st.amp * air;
-      sy = 1 + k * (0.08 * air - 0.2 * Math.pow(ground, 6));
-      st.lean = damp(st.lean, Math.min(0.34, Math.max(0, (rel - 0.4) * 0.28)), 5, dt);
-      lean = st.lean;
-      roll = Math.sin(st.hop * Math.PI) * 0.07 * k;
-      yaw = Math.sin(st.hop * Math.PI * 2) * 0.1 * k;
+      // gallop: a light rise once per stride and a rocking pitch
+      st.amp = damp(st.amp, 0.085 * Math.min(1.3, Math.max(0, rel)), 5, dt);
+      const k = st.amp / 0.085;
+      y = st.amp * Math.pow(Math.sin(Math.PI * f), 2);
+      st.lean = damp(st.lean, Math.min(0.16, Math.max(0, (rel - 0.5) * 0.14)), 4, dt);
+      pitch = st.lean + Math.sin(2 * Math.PI * f) * 0.05 * k;
 
-      if (landed && st.amp > 0.05 && !onPodium) {
-        st.ringPulse = 1;
-        const n = rel > 1.12 ? 5 : 2;
-        for (let p = 0; p < n; p++) {
-          fizz.emit(
-            x - 0.25 - Math.random() * 0.2,
-            0.08 + Math.random() * 0.25,
-            z + (Math.random() - 0.5) * 0.6,
-            -0.8 - Math.random() * 1.6,
-            0.4 + Math.random() * 0.8,
-            (Math.random() - 0.5) * 0.8,
-            0.6 + Math.random() * 0.6,
-            0.04 + Math.random() * 0.06,
-            Math.random() < 0.45 ? color : white,
+      if (landed && st.amp > 0.03 && !toEnclosure && rel > 0.4) {
+        for (let p = 0; p < 2; p++) {
+          turf.emit(
+            x - 0.3 - Math.random() * 0.2,
+            0.05,
+            z + (Math.random() - 0.5) * 0.4,
+            -1.2 - Math.random() * 2,
+            1.2 + Math.random() * 1.6,
+            (Math.random() - 0.5) * 0.6,
+            0.7 + Math.random() * 0.4,
+            0.035 + Math.random() * 0.035,
+            TURF[Math.floor(Math.random() * TURF.length)],
           );
         }
       }
-      // fast = trail of bubbles from the cap
-      if (rel > 1.18 && Math.random() < 0.5 && !onPodium) {
-        fizz.emit(
-          x - 0.3,
-          y + BOTTLE_HEIGHT * 0.9,
-          z + (Math.random() - 0.5) * 0.2,
-          -1.5 - Math.random(),
-          0.6,
-          0,
-          0.7,
-          0.05 + Math.random() * 0.04,
-          Math.random() < 0.6 ? color : white,
-        );
-      }
 
-      if (engine.phase === "finished") {
-        const t = engine.phaseTime;
-        if (onPodium) {
-          // hop onto the podium: 3rd, then 2nd, then the winner
-          const slot = PODIUM_SLOTS[place];
-          const start = 0.5 + (2 - place) * 0.55;
-          const u = clamp01((t - start) / 0.95);
-          if (!st.podiumStart) st.podiumStart = new THREE.Vector3(baseX, 0, z0);
-          const from = st.podiumStart;
-          const e = easeInOut(u);
-          x = from.x + (slot.x - from.x) * e;
-          z = from.z + (0 - from.z) * e;
-          const base = slot.h * e;
-          floor = base;
-          y = base + Math.sin(Math.PI * u) * 3.2;
-          lean = u < 1 ? 0.25 * Math.sin(Math.PI * u) : 0;
-          roll = 0;
-          sy = u < 1 ? 1 + 0.12 * Math.sin(Math.PI * u) : 1;
-          yaw = u < 1 ? u * Math.PI * 2 : 0;
-          if (u >= 1) {
-            const since = t - start - 0.95;
-            if (place === 0) {
-              // victory dance + fizz fountain
-              const b = Math.abs(Math.sin(since * 5));
-              y = slot.h + b * 0.55;
-              sy = 1 + 0.1 * b - 0.12 * Math.pow(1 - b, 8);
-              yaw = Math.sin(since * 2.2) * 0.6;
-              for (let p = 0; p < 2; p++) {
-                fizz.emit(
-                  x + (Math.random() - 0.5) * 0.1,
-                  y + BOTTLE_HEIGHT,
-                  z + (Math.random() - 0.5) * 0.1,
-                  (Math.random() - 0.5) * 2.2,
-                  1.6 + Math.random() * 1.8,
-                  (Math.random() - 0.5) * 2.2,
-                  0.9,
-                  0.05 + Math.random() * 0.07,
-                  Math.random() < 0.5 ? color : white,
-                );
-              }
-              if (time > st.nextConfetti) {
-                st.nextConfetti = time + 0.03;
-                confetti.emit(
-                  slot.x + (Math.random() - 0.5) * 9,
-                  9 + Math.random() * 2,
-                  (Math.random() - 0.5) * 6,
-                  (Math.random() - 0.5) * 1,
-                  -1,
-                  (Math.random() - 0.5) * 1,
-                  5,
-                  0.16 + Math.random() * 0.08,
-                  confettiColors[Math.floor(Math.random() * confettiColors.length)],
-                );
-              }
-            } else {
-              const b = Math.abs(Math.sin(since * 3 + place));
-              y = slot.h + b * 0.12;
-              yaw = Math.sin(since * 1.4 + place) * 0.3;
-            }
-          }
-        } else if (place === engine.n - 1) {
-          // last place had one too many: slowly tips over
-          tip = easeInOut(clamp01((t - 1.2) / 1.1));
-          lean = 0;
-          roll = 0;
-          y = 0;
-          sy = 1;
-          labelVisible = tip < 0.5;
-        } else {
-          y *= Math.max(0, 1 - t);
-        }
+      if (toEnclosure) {
+        // walk calmly to the winners' enclosure: 1st, then 2nd, then 3rd
+        const slot = ENCLOSURE_SLOTS[place];
+        const start = 0.9 + place * 0.35;
+        const u = clamp01((engine.phaseTime - start) / 2.8);
+        if (!st.walkFrom) st.walkFrom = new THREE.Vector3(baseX, 0, z);
+        const e = easeInOut(u);
+        x = st.walkFrom.x + (slot.x - st.walkFrom.x) * e;
+        z = st.walkFrom.z + (slot.z - st.walkFrom.z) * e;
+        const walking = u > 0 && u < 1;
+        y = walking ? Math.abs(Math.sin(engine.phaseTime * 7 + index)) * 0.025 : 0;
+        pitch = walking ? Math.sin(engine.phaseTime * 7 + index) * 0.02 : 0;
+        yawTarget = walking ? Math.atan2(-(slot.z - st.walkFrom.z), slot.x - st.walkFrom.x) * 0.6 : 0;
       }
+      if (engine.phase === "finished") tagVisible = false;
     }
 
     st.x = baseX;
+    st.yaw = damp(st.yaw, yawTarget, 4, dt);
 
     root.current.position.set(x, 0, z);
-    body.current.position.y = y + tip * 0.36;
-    body.current.scale.set(1 / Math.sqrt(sy), sy, 1 / Math.sqrt(sy));
-    body.current.rotation.set(roll, yaw, -lean + tip * (Math.PI / 2), "YXZ");
+    body.current.position.y = y;
+    body.current.rotation.set(0, st.yaw, -pitch, "YXZ");
 
     if (shadow.current) {
-      const h = Math.max(0, y - floor);
-      const sc = 1.5 * (1 - Math.min(0.6, h / 4));
+      const sc = 1.45 * (1 - Math.min(0.3, y));
       shadow.current.scale.set(sc, sc, sc);
-      shadow.current.position.y = floor + 0.012;
     }
-    st.ringPulse = Math.max(0, st.ringPulse - dt * 3);
-    if (ring.current) {
-      const sc = 1 + (1 - st.ringPulse) * 0.9;
-      ring.current.scale.set(sc, sc, sc);
-      (ring.current.material as THREE.MeshBasicMaterial).opacity = st.ringPulse * 0.9;
-      ring.current.position.y = engine.phase === "finished" ? -10 : 0.02;
-    }
-    if (glow.current) {
-      glow.current.visible = !onPodium;
-      const g = glow.current.material as THREE.MeshBasicMaterial;
-      g.opacity = 0.55 + 0.25 * Math.sin(time * 4 + index);
-    }
-    if (label.current) {
-      // In the stalls the gate already shows the numbers: labels pop in once they're out.
-      const inGate = engine.phase === "paddock" || engine.phase === "countdown" || x < START_X + 1.2;
-      st.labelIn = damp(st.labelIn, inGate || !labelVisible ? 0 : 1, 6, dt);
-      label.current.visible = st.labelIn > 0.02;
-      (label.current.material as THREE.SpriteMaterial).opacity = st.labelIn;
-      label.current.position.y = y + BOTTLE_HEIGHT + 0.7;
-      // partially compensate perspective so close-ups don't get giant labels
+
+    if (tag.current) {
+      // In the stalls the gate shows the numbers: tags appear once they're out.
+      const show = !inStalls && x > START_X + 1.2 && tagVisible;
+      st.tagIn = damp(st.tagIn, show ? 1 : 0, 6, dt);
+      tag.current.visible = st.tagIn > 0.02;
+      (tag.current.material as THREE.SpriteMaterial).opacity = st.tagIn;
+      tag.current.position.y = y + BOTTLE_HEIGHT + 0.55;
+      // partially compensate perspective so close-ups don't get giant tags
       const d = camera.position.distanceTo(root.current.position);
-      const k = 0.52 * Math.sqrt(Math.max(4, d)) * (0.7 + 0.3 * st.labelIn);
-      label.current.scale.set(k, k / 4, 1);
+      const k = 0.42 * Math.sqrt(Math.max(4, d));
+      tag.current.scale.set(k, k / 4, 1);
     }
   });
 
@@ -303,15 +194,7 @@ export function Bottle({ engine, index, contender, lanes, fizz, confetti }: Prop
     <group ref={root} position={[START_X, 0, z0]}>
       <mesh ref={shadow} rotation-x={-Math.PI / 2} position={[0, 0.012, 0]}>
         <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial map={blobTex} transparent depthWrite={false} opacity={0.9} />
-      </mesh>
-      <mesh ref={glow} rotation-x={-Math.PI / 2} position={[0, 0.016, 0]} scale={2.1}>
-        <planeGeometry args={[1, 1]} />
-        <meshBasicMaterial map={glowTex} color={neon} transparent depthWrite={false} toneMapped={false} />
-      </mesh>
-      <mesh ref={ring} rotation-x={-Math.PI / 2} position={[0, 0.02, 0]}>
-        <ringGeometry args={[0.42, 0.52, 40]} />
-        <meshBasicMaterial color={neon} transparent opacity={0} depthWrite={false} toneMapped={false} />
+        <meshBasicMaterial map={blobTex} transparent depthWrite={false} opacity={0.85} />
       </mesh>
       <group ref={body}>
         <primitive
@@ -320,24 +203,14 @@ export function Bottle({ engine, index, contender, lanes, fizz, confetti }: Prop
           position={[0, BOTTLE_HEIGHT / 2, 0]}
           rotation-y={BOTTLE_YAW}
         />
-        {/* jockey cap in racing colours */}
-        <group position={[0, BOTTLE_HEIGHT - 0.04, 0]}>
-          <mesh>
-            <sphereGeometry args={[0.25, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
-            <meshStandardMaterial color={color} roughness={0.35} emissive={color} emissiveIntensity={0.35} />
-          </mesh>
-          <mesh position={[0.05, 0.01, 0]} rotation-z={-0.14}>
-            <cylinderGeometry args={[0.31, 0.31, 0.03, 24, 1, false, 0, Math.PI]} />
-            <meshStandardMaterial color={color} roughness={0.35} emissive={color} emissiveIntensity={0.35} />
-          </mesh>
-          <mesh position={[0, 0.25, 0]}>
-            <sphereGeometry args={[0.045, 10, 8]} />
-            <meshStandardMaterial color="#ffffff" />
-          </mesh>
-        </group>
+        {/* saddle cloth with the number, wrapped around the bottle */}
+        <mesh position={[0, 0.43, 0]} rotation-y={-Math.PI / 2}>
+          <cylinderGeometry args={[0.334, 0.377, 0.35, 40, 1, true]} />
+          <meshStandardMaterial map={clothTex} roughness={0.75} side={THREE.DoubleSide} />
+        </mesh>
       </group>
-      <sprite ref={label} position={[0, BOTTLE_HEIGHT + 0.7, 0]} scale={[2.4, 0.6, 1]} renderOrder={20}>
-        <spriteMaterial map={labelTex} depthTest={false} depthWrite={false} transparent toneMapped={false} />
+      <sprite ref={tag} position={[0, BOTTLE_HEIGHT + 0.55, 0]} scale={[2, 0.5, 1]} renderOrder={20}>
+        <spriteMaterial map={tagTex} depthTest={false} depthWrite={false} transparent toneMapped={false} />
       </sprite>
     </group>
   );

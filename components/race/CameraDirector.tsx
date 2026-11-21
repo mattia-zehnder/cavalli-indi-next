@@ -2,10 +2,13 @@
 import { useRef } from "react";
 import * as THREE from "three";
 import { useFrame } from "@react-three/fiber";
-import { FINISH_X, PODIUM_X, START_X, worldX } from "@/lib/race/config";
+import { ENCLOSURE_X, FINISH_X, KEEP_LANES, START_X, worldX } from "@/lib/race/config";
+
+// With fixed lanes the field fills the whole width of the track: stand a little further back.
+const BACK = KEEP_LANES ? 2.5 : 0;
 import type { RaceEngine } from "@/lib/race/engine";
 
-type Shot = "paddock" | "gate" | "start" | "side" | "headon" | "finish" | "podium";
+type Shot = "paddock" | "gate" | "start" | "side" | "headon" | "finish" | "enclosure";
 
 const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
@@ -19,7 +22,6 @@ export function CameraDirector({ engine }: { engine: RaceEngine }) {
     pos: v(START_X + 10, 4, 10),
     look: v(START_X, 1, 0),
     fov: 40,
-    shake: 0,
     raceId: -1,
     shiftX: 0,
     shiftY: 0,
@@ -37,11 +39,13 @@ export function CameraDirector({ engine }: { engine: RaceEngine }) {
     let lead = 0;
     let last = Infinity;
     let sum = 0;
+    let lz = 0;
     for (let i = 0; i < n; i++) {
       const p = engine.progress[i];
       lead = Math.max(lead, p);
       last = Math.min(last, p);
       sum += p;
+      lz += engine.lateral[i] / n;
     }
     const leadX = worldX(Math.min(lead, 1.06));
     const lastX = worldX(Math.min(last, 1.06));
@@ -53,7 +57,7 @@ export function CameraDirector({ engine }: { engine: RaceEngine }) {
     let shot: Shot;
     if (engine.phase === "paddock") shot = "paddock";
     else if (engine.phase === "countdown") shot = "gate";
-    else if (engine.phase === "finished") shot = "podium";
+    else if (engine.phase === "finished") shot = "enclosure";
     else if (engine.t < 2.6) shot = "start";
     else if (lead > 0.86 || engine.finishOrder.length > 0) shot = "finish";
     else if (engine.t > T1 * 0.46 && engine.t < T1 * 0.6) shot = "headon";
@@ -88,15 +92,15 @@ export function CameraDirector({ engine }: { engine: RaceEngine }) {
         break;
       }
       case "side": {
-        const d = 15.5 + spread * 0.55;
-        pos = v(cx - 3.2, 6.2 + spread * 0.22, d);
-        look = v(cx + 1.6, 0.4, -0.6);
+        const d = 12.5 + BACK + spread * 0.45;
+        pos = v(cx - 3, 4.4 + BACK * 0.3 + spread * 0.15, lz + d);
+        look = v(cx + 1.5, 1.45, lz - 0.8);
         fov = 36;
         break;
       }
       case "headon": {
-        pos = v(leadX + 9.5, 2.3, 4.2);
-        look = v(cx - 3, 0.9, -0.4);
+        pos = v(leadX + 9.5, 2.4 + BACK * 0.2, lz + 4.8 + BACK * 1.4);
+        look = v(cx - 3, 0.9, lz);
         fov = 40;
         k = 4;
         break;
@@ -104,19 +108,19 @@ export function CameraDirector({ engine }: { engine: RaceEngine }) {
       case "finish": {
         // track the pack, then settle square-on to the finish line (photo-finish camera)
         const fx = Math.min(cx + 0.6, FINISH_X);
-        pos = v(fx, 6.2, 17.5);
-        look = v(fx, 0.6, -0.6);
+        pos = v(fx, 4.8 + BACK * 0.3, lz + 15 + BACK);
+        look = v(fx, 1.2, lz - 0.6);
         fov = 34;
         k = 3.5;
         break;
       }
-      case "podium":
+      case "enclosure":
       default: {
-        const a = Math.sin(time * 0.22) * 0.55;
-        pos = v(PODIUM_X + Math.sin(a) * 10.5, 3.9, Math.cos(a) * 10.5);
-        look = v(PODIUM_X, 1.9, 0);
-        fov = 38;
-        k = 1.6;
+        const a = Math.sin(time * 0.18) * 0.5;
+        pos = v(ENCLOSURE_X + Math.sin(a) * 10.5, 3.2, 0.4 + Math.cos(a) * 10.5);
+        look = v(ENCLOSURE_X, 1.4, 0.2);
+        fov = 36;
+        k = 1.4;
         break;
       }
     }
@@ -128,16 +132,15 @@ export function CameraDirector({ engine }: { engine: RaceEngine }) {
       s.raceId !== engine.raceId ||
       (s.shot !== shot &&
         !(s.shot === "side" && shot === "finish") &&
-        !(s.shot === "finish" && shot === "podium") &&
+        !(s.shot === "finish" && shot === "enclosure") &&
         !(s.shot === "paddock" && shot === "gate"));
-    if (s.shot !== shot && shot === "start") s.shake = 0.5;
     s.shot = shot;
     s.raceId = engine.raceId;
 
     if (engine.freeze > 0) {
       // the photo-finish frame: square-on to the line, exactly on it
-      s.pos.set(FINISH_X, 6.2 + (widen - 1) * 2, 17.5 * widen);
-      s.look.set(FINISH_X, 0.6, -0.6);
+      s.pos.set(FINISH_X, 4.8 + BACK * 0.3 + (widen - 1) * 2, lz + (15 + BACK) * widen);
+      s.look.set(FINISH_X, 1.2, lz - 0.6);
       s.fov = 34;
     } else if (cut) {
       s.pos.copy(pos);
@@ -150,18 +153,12 @@ export function CameraDirector({ engine }: { engine: RaceEngine }) {
       s.fov += (fov - s.fov) * a;
     }
 
-    s.shake = Math.max(0, s.shake - dt);
-    const sh = s.shake * 0.25;
-    cam.position.set(
-      s.pos.x + Math.sin(time * 41) * sh,
-      s.pos.y + Math.sin(time * 37 + 1) * sh,
-      s.pos.z,
-    );
+    cam.position.copy(s.pos);
     cam.lookAt(s.look);
 
     // Lens shift keeps the action clear of the HUD panels
     // (paddock cards at the bottom, results on the right).
-    const wantX = shot === "podium" && aspect > 1.2 ? 0.17 : 0;
+    const wantX = shot === "enclosure" && aspect > 1.2 ? 0.17 : 0;
     const wantY = shot === "paddock" ? 0.14 : 0;
     const a = 1 - Math.exp(-3 * dt);
     s.shiftX += (wantX - s.shiftX) * a;
