@@ -1,7 +1,8 @@
 // Runtime of a race. Lives outside React: the 3D scene reads it every frame,
 // the HUD subscribes to throttled snapshots, audio listens to its events.
 
-import { INNER_Z, KEEP_LANES, OUTER_Z, laneZ, worldX } from "./config";
+import { CONTENDERS, INNER_Z, KEEP_LANES, OUTER_Z, laneZ, worldX } from "./config";
+import { winnerNumber } from "./winner";
 import {
   generateRacePlan,
   progressAt,
@@ -68,9 +69,12 @@ export class RaceEngine {
   private eventListeners = new Set<(e: RaceEvent) => void>();
   private snap: Snapshot;
 
+  /** number of the race on the card (decides the winner, see winner.ts) */
+  raceNumber = 1;
+
   constructor(n: number) {
     this.n = n;
-    this.plan = generateRacePlan(n);
+    this.plan = generateRacePlan(n, undefined, winnerIndex(1));
     this.progress = new Float32Array(n);
     this.lateral = Float32Array.from({ length: n }, (_, i) => laneZ(i, n));
     this.prevX = new Float32Array(n).fill(worldX(0));
@@ -81,9 +85,10 @@ export class RaceEngine {
 
   // ---- control -----------------------------------------------------------
 
-  /** Back to the paddock with a brand new race (optionally a specific one). */
-  newRace(seed?: number) {
-    this.plan = generateRacePlan(this.n, seed);
+  /** Back to the paddock with race number `race` (optionally a specific seed). */
+  newRace(race: number, seed?: number) {
+    this.raceNumber = race;
+    this.plan = generateRacePlan(this.n, seed, winnerIndex(race));
     this.raceId++;
     this.phase = "paddock";
     this.t = 0;
@@ -100,6 +105,11 @@ export class RaceEngine {
     this.line = null;
     this.lastCount = 99;
     this.notify();
+  }
+
+  /** Make sure the race waiting in the paddock is race number `race`. */
+  prepare(race: number) {
+    if (this.phase === "paddock" && race !== this.raceNumber) this.newRace(race);
   }
 
   start() {
@@ -322,6 +332,13 @@ export class RaceEngine {
       raceId: this.raceId,
     };
   }
+}
+
+/** Runner index of the predetermined winner of a race. */
+function winnerIndex(race: number) {
+  const num = winnerNumber(race);
+  const i = CONTENDERS.findIndex((c) => c.number === num);
+  return i >= 0 ? i : undefined;
 }
 
 function smooth(a: number, b: number, x: number) {

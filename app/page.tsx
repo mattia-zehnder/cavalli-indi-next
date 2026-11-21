@@ -53,8 +53,14 @@ export default function CampariRaceNight() {
   // ?seed=123 replays a specific race (handy for testing)
   useEffect(() => {
     const seed = Number(new URLSearchParams(window.location.search).get("seed"));
-    if (seed) engine.newRace(seed);
+    if (seed) engine.newRace(tallyStore.get().race, seed);
   }, [engine]);
+
+  // The race in the paddock is always the current race number (its winner depends on it).
+  // Read the store directly: during hydration `tally` is still the server default.
+  useEffect(() => {
+    engine.prepare(tallyStore.get().race);
+  }, [engine, tally.race]);
 
   useEffect(() => {
     audio.configure({ sound, voice });
@@ -116,7 +122,7 @@ export default function CampariRaceNight() {
     audio.hush();
     audio.settle();
     tallyStore.update((t) => ({ ...t, race: t.race + 1 }));
-    engine.newRace();
+    engine.newRace(tallyStore.get().race);
   }, [engine, audio]);
 
   const toggleFullscreen = useCallback(() => {
@@ -127,7 +133,7 @@ export default function CampariRaceNight() {
   const resetNight = useCallback(() => {
     if (!window.confirm("Azzerare la serata? (vittorie, forma e numero corsa ripartono da zero)")) return;
     tallyStore.reset();
-    if (engine.phase === "finished") engine.newRace();
+    if (engine.phase === "finished") engine.newRace(1);
   }, [engine]);
 
   useEffect(() => {

@@ -1,10 +1,10 @@
 // Race "director": builds a whole race in advance so it can be dramatic.
 //
-// Fairness: the finishing order is a uniformly random permutation and every
-// runner's pace shape is drawn from the same distribution. We then generate a
-// batch of candidate races and keep the most exciting one. The excitement score
-// never looks at *who* is who (only at the shape of the race), so every
-// camparino still has exactly the same chance to win.
+// The finishing order is a random permutation (the caller can fix the winner,
+// see winner.ts) and every runner's pace shape is drawn from the same
+// distribution. We then generate a batch of candidate races and keep the most
+// exciting one. The excitement score never looks at *who* is who, only at the
+// shape of the race, so it never favours a particular camparino.
 
 export type Rng = () => number;
 
@@ -152,8 +152,13 @@ function randomPermutation(rng: Rng, n: number) {
   return a;
 }
 
-function buildCandidate(rng: Rng, n: number, seed: number): RacePlan {
+function buildCandidate(rng: Rng, n: number, seed: number, winner?: number): RacePlan {
   const order = randomPermutation(rng, n);
+  if (winner != null && winner >= 0 && winner < n) {
+    // put the chosen winner first; the rest of the order stays random
+    const k = order.indexOf(winner);
+    [order[0], order[k]] = [order[k], order[0]];
+  }
   const winTime = 21.5 + rng() * 3;
   const photo = rng() < 0.33;
   const gaps = [
@@ -370,12 +375,13 @@ function buildCommentary(plan: RacePlan, n: number, rng: Rng): CommentaryLine[] 
   return accepted;
 }
 
-export function generateRacePlan(n: number, seed = randomSeed()): RacePlan {
+/** `winner`: optional runner index that must win this race. */
+export function generateRacePlan(n: number, seed = randomSeed(), winner?: number): RacePlan {
   const rng = mulberry32(seed);
   let best: RacePlan | null = null;
   let bestScore = -Infinity;
   for (let c = 0; c < 48; c++) {
-    const cand = buildCandidate(rng, n, seed);
+    const cand = buildCandidate(rng, n, seed, winner);
     const s = excitement(cand, n, rng);
     if (s > bestScore) {
       best = cand;

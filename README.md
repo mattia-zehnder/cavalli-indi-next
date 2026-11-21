@@ -29,16 +29,17 @@ Il primo click (o il primo tasto) attiva l'audio.
 
 ## Come funziona una corsa
 
-Ogni gara viene "scritta" in anticipo da un piccolo regista (`lib/race/plan.ts`):
-l'ordine d'arrivo è una permutazione casuale uniforme, poi tra ~50 gare candidate
-viene scelta quella con più sorpassi, rimonte e arrivo serrato. La scelta non guarda
-mai chi è chi, quindi **ogni camparino ha sempre il 20% di probabilità di vincere**.
+Il **vincitore dipende solo dal numero della corsa**, con la formula in `lib/race/winner.ts`
+(su molte corse ognuno vince circa il 20% delle volte). Tutto il resto è casuale: un piccolo
+regista (`lib/race/plan.ts`) prova ~50 gare con quel vincitore e tiene quella con più sorpassi,
+rimonte e arrivo serrato, quindi la stessa corsa non si ripete mai uguale.
 
-`?seed=123` nell'URL rigioca una gara precisa (utile per provare il fotofinish: `?seed=4`).
+`?seed=123` nell'URL rigioca uno svolgimento preciso (utile per provare il fotofinish: `?seed=4`).
 
 ## Struttura
 
 - `lib/race/config.ts` — concorrenti (nomi, numeri, colori), nomi dei premi, misure della pista, distacchi
+- `lib/race/winner.ts` — chi vince la corsa N
 - `lib/race/plan.ts` — generazione della gara e della telecronaca
 - `lib/race/engine.ts` — orologio di gara, partenza, slow‑motion, fotofinish, posizioni in pista
 - `lib/race/tally.ts` — numero corsa, vittorie e forma della serata
