@@ -1,23 +1,15 @@
 "use client";
-import { useEffect, useMemo, Suspense } from "react";
+import { Suspense, useEffect, useMemo } from "react";
+import * as THREE from "three";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Environment, Lightformer, Stars } from "@react-three/drei";
+import { Environment, Lightformer, Stars, useProgress } from "@react-three/drei";
 import { Bloom, EffectComposer, Vignette } from "@react-three/postprocessing";
 import { CONTENDERS, FINISH_X } from "@/lib/race/config";
 import type { RaceEngine } from "@/lib/race/engine";
 import { Bottle } from "./Bottle";
 import { CameraDirector } from "./CameraDirector";
-import { ParticlePool, TurfRenderer } from "./Fx";
-import {
-  Backdrop,
-  Boards,
-  DistanceMarkers,
-  Enclosure,
-  FinishLine,
-  Ground,
-  Rails,
-  StartingGate,
-} from "./World";
+import { ConfettiRenderer, FizzRenderer, ParticlePool } from "./Fx";
+import { Backdrop, DistanceMarkers, FinishLine, Ground, Podium, Rails, StartingGate } from "./World";
 
 /** Advances the race clock once per rendered frame, before anything reads it. */
 function Driver({ engine }: { engine: RaceEngine }) {
@@ -25,37 +17,65 @@ function Driver({ engine }: { engine: RaceEngine }) {
   return null;
 }
 
-/** Floodlit night: cool overhead key, soft fill, neutral reflections. */
+/** Confetti burst over the finish line when the winner crosses. */
+function FinishConfetti({ engine, confetti }: { engine: RaceEngine; confetti: ParticlePool }) {
+  useEffect(
+    () =>
+      engine.onEvent((e) => {
+        if (e.type !== "cross" || e.place !== 1) return;
+        const c = new THREE.Color(CONTENDERS[e.horse].hex);
+        const palette = [c, new THREE.Color("#ffffff"), new THREE.Color("#ffd34d"), new THREE.Color("#e11d2e")];
+        for (let i = 0; i < 260; i++) {
+          confetti.emit(
+            FINISH_X + (Math.random() - 0.5) * 3,
+            3 + Math.random() * 3,
+            (Math.random() - 0.5) * 12,
+            (Math.random() - 0.3) * 6,
+            3 + Math.random() * 6,
+            (Math.random() - 0.5) * 6,
+            4 + Math.random() * 2,
+            0.14 + Math.random() * 0.1,
+            palette[i % palette.length],
+          );
+        }
+      }),
+    [engine, confetti],
+  );
+  return null;
+}
+
 function Lights() {
   return (
     <>
-      <hemisphereLight args={["#c9d6ff", "#1c3322", 0.6]} />
-      <directionalLight position={[8, 24, 14]} intensity={2.1} color="#f4f6ff" />
-      <directionalLight position={[-18, 10, -12]} intensity={0.5} color="#dfe8ff" />
-      <pointLight position={[FINISH_X, 9, 5]} intensity={30} distance={32} color="#fff6e8" />
+      <hemisphereLight args={["#ffe2cc", "#2a0a10", 0.55]} />
+      <directionalLight position={[12, 20, 16]} intensity={1.9} color="#fff0e0" />
+      <directionalLight position={[-20, 8, -10]} intensity={0.8} color="#ff3b4a" />
+      <pointLight position={[FINISH_X, 7, 4]} intensity={40} distance={30} color="#ffd9a0" />
       <Environment resolution={256} frames={1}>
-        <color attach="background" args={["#0a0f0c"]} />
-        <Lightformer form="rect" intensity={3} color="#ffffff" position={[0, 8, 8]} scale={[14, 3, 1]} />
-        <Lightformer form="rect" intensity={1.5} color="#fff2dc" position={[-9, 3, 5]} scale={[4, 6, 1]} />
-        <Lightformer form="rect" intensity={1.2} color="#dfe8ff" position={[9, 3, -6]} scale={[6, 4, 1]} />
-        <Lightformer form="circle" intensity={2} color="#ffffff" position={[0, 12, 0]} scale={4} />
+        <color attach="background" args={["#120608"]} />
+        <Lightformer form="rect" intensity={3} color="#ffffff" position={[0, 6, 8]} scale={[12, 3, 1]} />
+        <Lightformer form="rect" intensity={2} color="#ffcf9a" position={[-8, 3, 4]} scale={[4, 6, 1]} />
+        <Lightformer form="rect" intensity={2.5} color="#ff2a3c" position={[8, 2, -6]} scale={[6, 4, 1]} />
+        <Lightformer form="circle" intensity={2} color="#ffffff" position={[0, 10, 0]} scale={4} />
       </Environment>
     </>
   );
 }
 
 export function RaceScene({ engine }: { engine: RaceEngine }) {
-  const turf = useMemo(() => new ParticlePool(360), []);
+  const fizz = useMemo(() => new ParticlePool(420, "fizz"), []);
+  const confetti = useMemo(() => new ParticlePool(700, "confetti"), []);
 
   useEffect(() => {
     let last = engine.raceId;
     return engine.subscribe(() => {
       if (engine.raceId !== last) {
         last = engine.raceId;
-        turf.clear();
+        fizz.clear();
+        confetti.clear();
       }
     });
-  }, [engine, turf]);
+  }, [engine, fizz, confetti]);
 
   return (
     <Canvas
@@ -63,21 +83,22 @@ export function RaceScene({ engine }: { engine: RaceEngine }) {
       gl={{ antialias: true, powerPreference: "high-performance" }}
       camera={{ position: [-30, 4, 10], fov: 40, near: 0.1, far: 400 }}
     >
-      <color attach="background" args={["#05080a"]} />
-      <fog attach="fog" args={["#06090b", 45, 150]} />
+      <color attach="background" args={["#08030a"]} />
+      <fog attach="fog" args={["#0a0407", 38, 125]} />
       <Driver engine={engine} />
       <CameraDirector engine={engine} />
       <Lights />
-      <Stars radius={170} depth={40} count={1200} factor={3.5} saturation={0} fade speed={0.2} />
+      <Stars radius={160} depth={40} count={2500} factor={5} saturation={0} fade speed={0.4} />
 
       <Ground />
       <Rails />
-      <Boards />
       <DistanceMarkers />
       <FinishLine />
       <StartingGate engine={engine} />
-      <Enclosure engine={engine} />
-      <Backdrop engine={engine} />
+      <Podium engine={engine} />
+      <Suspense fallback={null}>
+        <Backdrop engine={engine} />
+      </Suspense>
 
       <Suspense fallback={null}>
         {CONTENDERS.map((c, i) => (
@@ -87,17 +108,25 @@ export function RaceScene({ engine }: { engine: RaceEngine }) {
             index={i}
             contender={c}
             lanes={CONTENDERS.length}
-            turf={turf}
+            fizz={fizz}
+            confetti={confetti}
           />
         ))}
       </Suspense>
 
-      <TurfRenderer pool={turf} />
+      <FizzRenderer pool={fizz} />
+      <ConfettiRenderer pool={confetti} />
+      <FinishConfetti engine={engine} confetti={confetti} />
 
       <EffectComposer multisampling={4}>
-        <Bloom mipmapBlur intensity={0.5} luminanceThreshold={1} luminanceSmoothing={0.15} />
-        <Vignette offset={0.3} darkness={0.55} />
+        <Bloom mipmapBlur intensity={0.85} luminanceThreshold={0.9} luminanceSmoothing={0.2} />
+        <Vignette offset={0.25} darkness={0.7} />
       </EffectComposer>
     </Canvas>
   );
+}
+
+/** 0..100 while the 3D model downloads. */
+export function useLoadProgress() {
+  return useProgress();
 }

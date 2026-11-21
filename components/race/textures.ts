@@ -1,18 +1,18 @@
 import * as THREE from "three";
 
 // Canvas-drawn textures (no network needed). Text textures are redrawn once the
-// web fonts have loaded, so they never stay stuck on a fallback font.
+// display font has loaded, so they never stay stuck on a fallback font.
 
-const families: Record<string, string> = {};
-function family(varName: "--font-display" | "--font-serif", fallback: string) {
-  if (families[varName]) return families[varName];
-  if (typeof document === "undefined") return fallback;
-  const v = getComputedStyle(document.body).getPropertyValue(varName).trim();
-  families[varName] = v ? `${v}, ${fallback}` : fallback;
-  return families[varName];
+export const DISPLAY_FONT = "var(--font-display)";
+
+let resolvedFamily: string | null = null;
+function displayFamily() {
+  if (resolvedFamily) return resolvedFamily;
+  if (typeof document === "undefined") return "Impact, sans-serif";
+  const v = getComputedStyle(document.body).getPropertyValue("--font-display").trim();
+  resolvedFamily = v ? `${v}, Impact, sans-serif` : "Impact, sans-serif";
+  return resolvedFamily;
 }
-const display = () => family("--font-display", "'Arial Narrow', sans-serif");
-const serif = () => family("--font-serif", "Georgia, serif");
 
 function canvas(w: number, h: number) {
   const c = document.createElement("canvas");
@@ -21,124 +21,90 @@ function canvas(w: number, h: number) {
   return { c, g: c.getContext("2d")! };
 }
 
-type Fonts = { display: string; serif: string };
-
-function textTexture(w: number, h: number, draw: (g: CanvasRenderingContext2D, f: Fonts) => void) {
+function textTexture(w: number, h: number, draw: (g: CanvasRenderingContext2D, font: string) => void) {
   const { c, g } = canvas(w, h);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 8;
+  tex.anisotropy = 4;
   const paint = () => {
     g.clearRect(0, 0, w, h);
-    draw(g, { display: display(), serif: serif() });
+    draw(g, displayFamily());
     tex.needsUpdate = true;
   };
   paint();
   if (typeof document !== "undefined" && document.fonts) {
-    Promise.all([
-      document.fonts.load(`700 64px ${display()}`),
-      document.fonts.load(`700 64px ${serif()}`),
-    ])
-      .then(paint)
-      .catch(() => {});
+    document.fonts.load(`64px ${displayFamily()}`).then(paint).catch(() => {});
     document.fonts.ready.then(paint).catch(() => {});
   }
-  return { tex, repaint: paint };
+  return tex;
 }
 
-/** Broadcast pointer above each runner: saddle-cloth number + name. */
-export function tagTexture(num: number, name: string, hex: string) {
-  const W = 512,
-    H = 128;
-  return textTexture(W, H, (g, f) => {
-    g.font = `600 64px ${f.display}`;
+function roundRect(g: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  g.beginPath();
+  g.moveTo(x + r, y);
+  g.arcTo(x + w, y, x + w, y + h, r);
+  g.arcTo(x + w, y + h, x, y + h, r);
+  g.arcTo(x, y + h, x, y, r);
+  g.arcTo(x, y, x + w, y, r);
+  g.closePath();
+}
+
+/** Floating badge above each bottle: coloured number + name. */
+export function labelTexture(num: number, name: string, hex: string) {
+  const W = 640,
+    H = 160;
+  return textTexture(W, H, (g, font) => {
+    g.font = `92px ${font}`;
     const nameW = g.measureText(name.toUpperCase()).width;
-    const total = Math.min(W - 4, 112 + nameW + 28);
+    const total = Math.min(W - 8, 150 + nameW + 44);
     const x0 = (W - total) / 2;
-    // body
-    g.fillStyle = "rgba(12,16,14,0.88)";
-    g.fillRect(x0, 8, total, 96);
-    // number block
+    roundRect(g, x0, 14, total, H - 28, 60);
+    g.fillStyle = "rgba(10,6,8,0.82)";
+    g.fill();
+    g.lineWidth = 6;
+    g.strokeStyle = hex;
+    g.stroke();
+    // number disc
+    g.beginPath();
+    g.arc(x0 + 66, H / 2, 52, 0, Math.PI * 2);
     g.fillStyle = hex;
-    g.fillRect(x0, 8, 96, 96);
+    g.fill();
     g.fillStyle = "#fff";
     g.textAlign = "center";
     g.textBaseline = "middle";
-    g.font = `700 78px ${f.display}`;
-    g.fillText(String(num), x0 + 48, 60);
+    g.font = `84px ${font}`;
+    g.fillText(String(num), x0 + 66, H / 2 + 5);
     g.textAlign = "left";
-    g.font = `600 64px ${f.display}`;
-    g.fillStyle = "#f3ecdc";
-    g.fillText(name.toUpperCase(), x0 + 112, 60);
-    // pointer
-    g.fillStyle = "rgba(12,16,14,0.88)";
-    g.beginPath();
-    g.moveTo(W / 2 - 12, 104);
-    g.lineTo(W / 2 + 12, 104);
-    g.lineTo(W / 2, 124);
-    g.closePath();
-    g.fill();
-  }).tex;
+    g.font = `80px ${font}`;
+    g.fillText(name.toUpperCase(), x0 + 134, H / 2 + 5);
+  });
 }
 
-/** Square plate with a number (starting stalls). */
+/** Square plate with a big number (starting gate, podium). */
 export function numberPlateTexture(num: number | string, bg: string, fg = "#fff") {
-  return textTexture(256, 256, (g, f) => {
+  return textTexture(256, 256, (g, font) => {
     g.fillStyle = bg;
-    g.fillRect(0, 0, 256, 256);
-    g.strokeStyle = "rgba(255,255,255,0.85)";
-    g.lineWidth = 10;
-    g.strokeRect(12, 12, 232, 232);
+    roundRect(g, 8, 8, 240, 240, 36);
+    g.fill();
     g.fillStyle = fg;
     g.textAlign = "center";
     g.textBaseline = "middle";
-    g.font = `700 180px ${f.display}`;
-    g.fillText(String(num), 128, 136);
-  }).tex;
+    g.font = `190px ${font}`;
+    g.fillText(String(num), 128, 140);
+  });
 }
 
-/**
- * Saddle cloth wrapped around the bottle: coloured band with the number on
- * both sides. u = 0.25 ends up facing the camera (see Bottle).
- */
-export function saddleClothTexture(num: number, hex: string) {
-  const W = 512,
-    H = 128;
-  return textTexture(W, H, (g, f) => {
-    g.fillStyle = hex;
-    g.fillRect(0, 0, W, H);
-    g.fillStyle = "rgba(255,255,255,0.9)";
-    g.fillRect(0, 6, W, 6);
-    g.fillRect(0, H - 12, W, 6);
-    g.fillStyle = "#fff";
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.font = `700 92px ${f.display}`;
-    g.fillText(String(num), W * 0.25, H / 2 + 4);
-    g.fillText(String(num), W * 0.75, H / 2 + 4);
-  }).tex;
-}
-
-/** Night turf: mowing stripes across the course + speckle. */
-export function turfTexture() {
-  const W = 512,
-    H = 256;
-  const { c, g } = canvas(W, H);
-  for (let x = 0; x < W; x += 64) {
-    g.fillStyle = (x / 64) % 2 ? "#27512f" : "#2d5c35";
-    g.fillRect(x, 0, 64, H);
-  }
-  const img = g.getImageData(0, 0, W, H);
-  for (let i = 0; i < img.data.length; i += 4) {
-    const n = (Math.random() - 0.5) * 22;
-    img.data[i] += n * 0.6;
-    img.data[i + 1] += n;
-    img.data[i + 2] += n * 0.5;
-  }
-  g.putImageData(img, 0, 0);
+export function checkerTexture(cols = 4, rows = 24) {
+  const s = 32;
+  const { c, g } = canvas(cols * s, rows * s);
+  for (let y = 0; y < rows; y++)
+    for (let x = 0; x < cols; x++) {
+      g.fillStyle = (x + y) % 2 ? "#111" : "#f5f5f5";
+      g.fillRect(x * s, y * s, s, s);
+    }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.magFilter = THREE.NearestFilter;
   tex.anisotropy = 8;
   return tex;
 }
@@ -147,83 +113,69 @@ export function turfTexture() {
 export function blobTexture() {
   const { c, g } = canvas(128, 128);
   const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-  grd.addColorStop(0, "rgba(0,0,0,0.7)");
-  grd.addColorStop(0.5, "rgba(0,0,0,0.3)");
+  grd.addColorStop(0, "rgba(0,0,0,0.75)");
+  grd.addColorStop(0.5, "rgba(0,0,0,0.35)");
   grd.addColorStop(1, "rgba(0,0,0,0)");
   g.fillStyle = grd;
   g.fillRect(0, 0, 128, 128);
   return new THREE.CanvasTexture(c);
 }
 
-/** Distance pole board. */
-export function markerTexture(text: string, red = false) {
-  return textTexture(256, 160, (g, f) => {
-    g.fillStyle = red ? "#c8102e" : "#f4f1ea";
-    g.fillRect(0, 0, 256, 160);
-    g.fillStyle = red ? "#fff" : "#111";
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.font = `700 118px ${f.display}`;
-    g.fillText(text, 128, 86);
-  }).tex;
+/** Soft glow disc (white, tint with material colour). */
+export function glowTexture() {
+  const { c, g } = canvas(128, 128);
+  const grd = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grd.addColorStop(0, "rgba(255,255,255,1)");
+  grd.addColorStop(0.35, "rgba(255,255,255,0.45)");
+  grd.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(c);
 }
 
-/** Advertising board along the inside rail. */
-export function boardTexture(kind: "campari" | "bar" | "night" | "logo", logo?: HTMLImageElement) {
-  const W = 1024,
-    H = 160;
-  const { tex, repaint } = textTexture(W, H, (g, f) => {
-    const red = "#c8102e";
-    if (kind === "campari") {
-      g.fillStyle = red;
-      g.fillRect(0, 0, W, H);
-      g.fillStyle = "#fff";
-      g.textAlign = "center";
-      g.textBaseline = "middle";
-      g.font = `700 112px ${f.serif}`;
-      g.fillText("Campari", W / 2, H / 2 + 6);
-    } else if (kind === "bar") {
-      g.fillStyle = "#f4f1ea";
-      g.fillRect(0, 0, W, H);
-      g.fillStyle = "#1a1a1a";
-      g.textAlign = "center";
-      g.textBaseline = "middle";
-      g.font = `600 78px ${f.display}`;
-      g.fillText("BAR INDIPENDENZA · BRONI", W / 2, H / 2 + 4);
-    } else if (kind === "night") {
-      g.fillStyle = "#0f2a22";
-      g.fillRect(0, 0, W, H);
-      g.fillStyle = "#e9dcb8";
-      g.textAlign = "center";
-      g.textBaseline = "middle";
-      g.font = `italic 700 84px ${f.serif}`;
-      g.fillText("Casino Campari Night", W / 2, H / 2 + 4);
-    } else {
-      g.fillStyle = "#f4f1ea";
-      g.fillRect(0, 0, W, H);
-      if (logo?.complete && logo.naturalWidth) {
-        for (const x of [W * 0.2, W * 0.5, W * 0.8]) g.drawImage(logo, x - 65, 15, 130, 130);
-      }
-    }
-  });
-  if (kind === "logo" && logo && !logo.complete) logo.addEventListener("load", repaint, { once: true });
-  return tex;
-}
-
-/** Signs for the winners' enclosure ("1°", "2°", "3°") and the finish ("ARRIVO"). */
-export function signTexture(text: string, bg = "#f4f1ea", fg = "#111", w = 256, h = 160) {
-  return textTexture(w, h, (g, f) => {
-    g.fillStyle = bg;
-    g.fillRect(0, 0, w, h);
-    g.fillStyle = fg;
+/** Neon text sign. */
+export function neonTexture(text: string, color: string, w = 2048, h = 256) {
+  return textTexture(w, h, (g, font) => {
     g.textAlign = "center";
     g.textBaseline = "middle";
-    let size = h * 0.68;
-    g.font = `700 ${size}px ${f.display}`;
-    while (g.measureText(text).width > w * 0.86 && size > 12) {
+    let size = h * 0.72;
+    g.font = `${size}px ${font}`;
+    while (g.measureText(text).width > w * 0.92 && size > 20) {
       size -= 4;
-      g.font = `700 ${size}px ${f.display}`;
+      g.font = `${size}px ${font}`;
     }
-    g.fillText(text, w / 2, h / 2 + size * 0.05);
-  }).tex;
+    g.shadowColor = color;
+    g.shadowBlur = 28;
+    g.fillStyle = color;
+    g.fillText(text, w / 2, h / 2 + 6);
+    g.shadowBlur = 0;
+    g.fillStyle = "rgba(255,255,255,0.85)";
+    g.fillText(text, w / 2, h / 2 + 6);
+  });
+}
+
+/** Distance pole sign. */
+export function markerTexture(text: string, bg: string) {
+  return textTexture(256, 160, (g, font) => {
+    g.fillStyle = bg;
+    roundRect(g, 6, 6, 244, 148, 20);
+    g.fill();
+    g.fillStyle = "#fff";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = `112px ${font}`;
+    g.fillText(text, 128, 86);
+  });
+}
+
+/** Ground lane number painted just after the gate. */
+export function laneNumberTexture(num: number, hex: string) {
+  return textTexture(256, 256, (g, font) => {
+    g.fillStyle = hex;
+    g.globalAlpha = 0.9;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = `220px ${font}`;
+    g.fillText(String(num), 128, 140);
+  });
 }

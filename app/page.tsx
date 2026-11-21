@@ -10,13 +10,13 @@ import { fillLine } from "@/lib/race/plan";
 import { tallyStore } from "@/lib/race/tally";
 import {
   Controls,
+  Countdown,
   Credit,
   Loading,
+  Paddock,
   PhotoFinish,
-  Racecard,
   Results,
   Standings,
-  StartStrip,
   Ticker,
   TopBar,
   Tracker,
@@ -71,17 +71,20 @@ export default function CampariRaceNight() {
     () =>
       engine.onEvent((e) => {
         switch (e.type) {
+          case "countdown":
+            audio.countdown(e.n);
+            break;
           case "go":
             audio.go();
             break;
           case "beat":
-            audio.stride(e.strength);
+            audio.beat(e.strength);
             break;
           case "photo":
             audio.shutter();
             break;
           case "cross":
-            if (e.place === 1) audio.finish();
+            if (e.place === 1) audio.bell();
             break;
           case "line": {
             const urgent = e.line.kind === "win" || e.line.kind === "photo" || e.line.kind === "start";
@@ -89,13 +92,12 @@ export default function CampariRaceNight() {
             break;
           }
           case "end": {
+            audio.fanfare();
             const id = CONTENDERS[e.winner].id;
-            const order = engine.finishOrder.map((i) => CONTENDERS[i].id);
             tallyStore.update((t) => ({
               ...t,
               wins: { ...t.wins, [id]: (t.wins[id] ?? 0) + 1 },
               history: [id, ...t.history].slice(0, 20),
-              results: [order, ...t.results].slice(0, 20),
             }));
             break;
           }
@@ -120,7 +122,6 @@ export default function CampariRaceNight() {
     if (engine.phase !== "finished") return;
     audio.unlock();
     audio.hush();
-    audio.settle();
     tallyStore.update((t) => ({ ...t, race: t.race + 1 }));
     engine.newRace(tallyStore.get().race);
   }, [engine, audio]);
@@ -131,7 +132,7 @@ export default function CampariRaceNight() {
   }, []);
 
   const resetNight = useCallback(() => {
-    if (!window.confirm("Azzerare la serata? (vittorie, forma e numero corsa ripartono da zero)")) return;
+    if (!window.confirm("Azzerare la serata? (vittorie e numero corsa ripartono da zero)")) return;
     tallyStore.reset();
     if (engine.phase === "finished") engine.newRace(1);
   }, [engine]);
@@ -200,7 +201,7 @@ export default function CampariRaceNight() {
 
   return (
     <main
-      className={`relative h-[100svh] w-full overflow-hidden bg-[#05080a] text-white select-none ${
+      className={`relative h-[100svh] w-full overflow-hidden bg-[#08030a] text-white select-none ${
         idle && snap.phase !== "paddock" && snap.phase !== "finished" ? "hide-cursor" : ""
       }`}
     >
@@ -209,21 +210,21 @@ export default function CampariRaceNight() {
       </div>
 
       {/* soft vignette + top shade so the HUD always reads */}
-      <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(120%_80%_at_50%_40%,transparent_60%,rgba(0,0,0,.45))]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[20%] bg-gradient-to-b from-black/70 via-black/30 to-transparent" />
+      <div className="pointer-events-none absolute inset-0 z-10 bg-[radial-gradient(120%_80%_at_50%_40%,transparent_55%,rgba(0,0,0,.55))]" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[22%] bg-gradient-to-b from-black/75 via-black/35 to-transparent" />
 
       <TopBar snap={snap} race={tally.race} />
 
       {snap.phase === "running" && <Standings snap={snap} />}
       {racing && <Tracker snap={snap} />}
       <Ticker snap={snap} />
-      <StartStrip snap={snap} />
+      <Countdown snap={snap} />
       <WinnerBanner snap={snap} />
       <PhotoFinish snap={snap} />
 
       <AnimatePresence>
         {snap.phase === "paddock" && (
-          <Racecard key={`p${snap.raceId}`} tally={tally} onStart={start} disabled={!ready} />
+          <Paddock key={`p${snap.raceId}`} tally={tally} onStart={start} disabled={!ready} />
         )}
         {snap.phase === "finished" && (
           <Results key={`r${snap.raceId}`} snap={snap} race={tally.race} onNext={next} />
